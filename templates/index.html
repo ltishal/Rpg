@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0d12">
+<title>🎲 RPG ИИ-Мастер</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d0d12; color:#e8e8f0; display:flex; flex-direction:column;
+    height:100dvh; font-size:16px; }
+  header { display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; background:#14141c; border-bottom:1px solid #22222e;
+    padding-top:max(10px, env(safe-area-inset-top)); flex-shrink:0; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header h1 span { color:#b48cff; }
+  #status { background:#11111a; border-bottom:1px solid #22222e;
+    padding:10px 14px; display:flex; flex-direction:column; gap:8px;
+    font-size:13px; flex-shrink:0; }
+  .status-row { display:flex; align-items:center; gap:10px; }
+  .status-name { font-weight:600; color:#b48cff; }
+  .status-chip { background:#1e1e2a; padding:2px 8px; border-radius:8px;
+    color:#c8c8d8; font-size:12px; white-space:nowrap; }
+  .bar-wrap { flex:1; height:6px; background:#1e1e2a; border-radius:3px; overflow:hidden; }
+  .bar-fill { height:100%; transition:width .4s ease; border-radius:3px; }
+  .bar-hp { background:linear-gradient(90deg,#ff5555,#ff8888); }
+  .bar-xp { background:linear-gradient(90deg,#7c5cff,#b48cff); }
+  .bar-label { min-width:52px; text-align:right; color:#a8a8bc; font-size:12px; }
+  #chat { flex:1; overflow-y:auto; padding:14px; display:flex;
+    flex-direction:column; gap:12px; padding-bottom:20px; -webkit-overflow-scrolling:touch; }
+  .msg { max-width:88%; padding:10px 14px; border-radius:14px;
+    line-height:1.55; white-space:pre-wrap; word-wrap:break-word; animation:fadein .2s ease; }
+  @keyframes fadein { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+  .msg.user { align-self:flex-end; background:#2a2a3a; border-bottom-right-radius:4px; }
+  .msg.master { align-self:flex-start; background:transparent; padding:4px 0;
+    font-family:Georgia,"Times New Roman",serif; font-size:16px; color:#e0d8f5; max-width:100%; }
+  .msg.system { align-self:center; font-size:13px; color:#8a8a9a; background:#1a1a24;
+    border:1px dashed #333344; padding:6px 12px; max-width:95%; }
+  .msg.dice { align-self:center; background:#2a1e3e; border:1px solid #4a3a6e;
+    color:#d8c8ff; font-family:"SF Mono",Menlo,monospace; font-size:14px; }
+  .msg.dice b { color:#b48cff; }
+  .typing-indicator::after { content:'▍'; animation:blink 1s infinite; }
+  @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+  #input-bar { display:flex; gap:8px; padding:10px 12px; background:#14141c;
+    border-top:1px solid #22222e; padding-bottom:max(10px, env(safe-area-inset-bottom));
+    align-items:flex-end; flex-shrink:0; }
+  #input { flex:1; background:#1e1e2a; border:1px solid #2a2a38; color:#e8e8f0;
+    border-radius:12px; padding:10px 12px; font-family:inherit; font-size:16px;
+    resize:none; outline:none; max-height:120px; line-height:1.4; }
+  #input:focus { border-color:#7c5cff; }
+  #send-btn { width:44px; height:44px; border-radius:12px; background:#7c5cff;
+    color:#fff; border:none; font-size:18px; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; flex-shrink:0; }
+  #send-btn:disabled { background:#3a3a48; opacity:.5; }
+  .btn { background:#1e1e2a; color:#e8e8f0; border:1px solid #2a2a38;
+    border-radius:10px; padding:8px 12px; font-size:14px; cursor:pointer; font-family:inherit; }
+  .btn:active { background:#2a2a38; }
+  .btn.primary { background:#7c5cff; border-color:#7c5cff; color:#fff; }
+  .icon-btn { width:38px; height:38px; border-radius:10px; background:#1e1e2a;
+    border:1px solid #2a2a38; color:#e8e8f0; font-size:16px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; }
+  #drawer-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); opacity:0;
+    pointer-events:none; transition:opacity .2s; z-index:10; }
+  #drawer-bg.open { opacity:1; pointer-events:auto; }
+  #drawer { position:fixed; top:0; right:0; bottom:0; width:min(320px, 88vw);
+    background:#14141c; border-left:1px solid #22222e; transform:translateX(100%);
+    transition:transform .25s ease; z-index:11; padding:20px;
+    padding-top:max(20px, env(safe-area-inset-top)); display:flex;
+    flex-direction:column; gap:12px; overflow-y:auto; }
+  #drawer.open { transform:translateX(0); }
+  #drawer h2 { font-size:12px; color:#b48cff; margin:8px 0 2px; font-weight:600;
+    text-transform:uppercase; letter-spacing:1px; }
+  .drawer-section { display:flex; flex-direction:column; gap:6px; }
+  #drawer .btn { width:100%; text-align:left; padding:11px 14px; font-size:15px; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none;
+    align-items:center; justify-content:center; z-index:20; padding:20px; }
+  #modal.open { display:flex; }
+  .modal-content { background:#14141c; border:1px solid #2a2a38; border-radius:16px;
+    padding:20px; width:100%; max-width:420px; max-height:80vh; overflow-y:auto;
+    display:flex; flex-direction:column; gap:12px; }
+  .modal-content h3 { margin:0 0 8px; font-size:16px; }
+  .modal-content input { width:100%; background:#1e1e2a; border:1px solid #2a2a38;
+    color:#e8e8f0; border-radius:10px; padding:10px 12px; font-size:16px;
+    font-family:inherit; outline:none; }
+  .save-item { padding:10px 12px; background:#1e1e2a; border:1px solid #2a2a38;
+    border-radius:10px; cursor:pointer; font-size:14px; }
+  .save-item:active { background:#2a2a38; }
+  .kv { display:flex; justify-content:space-between; padding:6px 0;
+    border-bottom:1px solid #22222e; font-size:14px; }
+  .kv:last-child { border-bottom:none; }
+  .kv .k { color:#8a8a9a; }
+  .kv .v { color:#e8e8f0; font-weight:500; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .tag { background:#1e1e2a; padding:4px 10px; border-radius:8px; font-size:13px; color:#c8c8d8; }
+  .tag.empty { color:#5a5a6e; font-style:italic; }
+  .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .stat-box { background:#1e1e2a; padding:8px; border-radius:10px; text-align:center; }
+  .stat-box .lbl { font-size:11px; color:#8a8a9a; text-transform:uppercase; }
+  .stat-box .val { font-size:16px; font-weight:600; color:#e8e8f0; margin-top:2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎲 <span>RPG</span> ИИ-Мастер</h1>
+  <button class="icon-btn" id="menu-btn">☰</button>
+</header>
+<div id="status"></div>
+<div id="chat"></div>
+<div id="input-bar">
+  <textarea id="input" placeholder="Ваши действия..." rows="1"></textarea>
+  <button id="send-btn">➤</button>
+</div>
+<div id="drawer-bg"></div>
+<aside id="drawer">
+  <h2>Действия</h2>
+  <div class="drawer-section">
+    <button class="btn" data-action="dice">🎲 Бросок 1d20</button>
+    <button class="btn" data-action="dice-custom">🎲 Свой бросок...</button>
+    <button class="btn" data-action="sheet">📜 Полный лист</button>
+  </div>
+  <h2>Игра</h2>
+  <div class="drawer-section">
+    <button class="btn" data-action="save">💾 Сохранить</button>
+    <button class="btn" data-action="load">📂 Загрузить</button>
+    <button class="btn" data-action="reset">✨ Новая игра</button>
+    <button class="btn" data-action="help">❓ Справка</button>
+  </div>
+</aside>
+<div id="modal"><div class="modal-content" id="modal-content"></div></div>
+<script>
+let messages = [], state = null, busy = false;
+const chatEl = document.getElementById('chat');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send-btn');
+const drawerEl = document.getElementById('drawer');
+const drawerBg = document.getElementById('drawer-bg');
+const modalEl = document.getElementById('modal');
+const modalContent = document.getElementById('modal-content');
+const statusEl = document.getElementById('status');
+const LS_KEY = 'rpg_session_v2';
+const EMPTY_STATE = { name:"Пустой", level:1, xp:0, xp_next:100, hp:10, max_hp:10, gold:0,
+  stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10}, inventory:[], quests:[], conditions:[] };
+function persist(){ try{localStorage.setItem(LS_KEY,JSON.stringify({messages,state}));}catch(e){} }
+function restore(){ try{const r=localStorage.getItem(LS_KEY); if(!r)return null; const d=JSON.parse(r);
+  if(d&&Array.isArray(d.messages))return d;}catch(e){} return null; }
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderStatus(){
+  if(!state){statusEl.innerHTML='';return;}
+  const hpPct=state.max_hp?Math.max(0,Math.min(100,state.hp/state.max_hp*100)):0;
+  const xpPct=state.xp_next?Math.max(0,Math.min(100,state.xp/state.xp_next*100)):0;
+  const c=state.conditions.length?' · '+state.conditions.map(x=>`<span style="color:#ff8888">${esc(x)}</span>`).join(', '):'';
+  statusEl.innerHTML=`<div class="status-row">
+    <span class="status-name">${esc(state.name||'Пустой')}</span>
+    <span class="status-chip">Ур. ${state.level}</span>
+    <span class="status-chip">💰 ${state.gold}</span></div>
+    <div class="status-row"><span style="color:#ff8888;font-size:12px">HP</span>
+    <div class="bar-wrap"><div class="bar-fill bar-hp" style="width:${hpPct}%"></div></div>
+    <span class="bar-label">${state.hp}/${state.max_hp}</span></div>
+    <div class="status-row"><span style="color:#b48cff;font-size:12px">XP</span>
+    <div class="bar-wrap"><div class="bar-fill bar-xp" style="width:${xpPct}%"></div></div>
+    <span class="bar-label">${state.xp}/${state.xp_next}</span></div>
+    ${c?`<div class="status-row" style="font-size:12px">${c}</div>`:''}`;
+}
+function scrollBottom(){chatEl.scrollTop=chatEl.scrollHeight;}
+function addMsg(role,text){const d=document.createElement('div');d.className='msg '+role;d.textContent=text;
+  chatEl.appendChild(d);scrollBottom();return d;}
+function addHtmlMsg(role,html){const d=document.createElement('div');d.className='msg '+role;d.innerHTML=html;
+  chatEl.appendChild(d);scrollBottom();return d;}
+async function callAI(msgs){
+  busy=true; sendBtn.disabled=true;
+  const md=document.createElement('div'); md.className='msg master typing-indicator';
+  chatEl.appendChild(md); scrollBottom();
+  let full='';
+  try{
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:msgs})});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const reader=res.body.getReader(); const dec=new TextDecoder();
+    md.classList.remove('typing-indicator');
+    while(true){const{done,value}=await reader.read(); if(done)break;
+      const c=dec.decode(value,{stream:true}); if(!c)continue;
+      full+=c; md.textContent=full; scrollBottom();}
+    const t=dec.decode(); if(t){full+=t; md.textContent=full; scrollBottom();}
+  }catch(e){ md.classList.remove('typing-indicator');
+    md.textContent=(full||'')+`\n[Ошибка: ${e.message}]`; }
+  if(full.trim()){ messages.push({role:'assistant',content:full}); persist(); await updateState(); }
+  busy=false; sendBtn.disabled=false; inputEl.focus();
+}
+async function updateState(){
+  if(!state) state={...EMPTY_STATE};
+  try{
+    const res=await fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages,state})});
+    if(res.ok){ state=await res.json(); renderStatus(); persist(); }
+  }catch(e){}
+}
+async function sendMessage(text){
+  if(busy)return; text=(text||'').trim(); if(!text)return;
+  if(text.startsWith('/')){const [c,...r]=text.split(/\s+/); inputEl.value=''; autosize();
+    handleCommand(c.toLowerCase(),r.join(' ')); return;}
+  addMsg('user',text); messages.push({role:'user',content:text}); persist();
+  inputEl.value=''; autosize(); await callAI(messages);
+}
+function handleCommand(cmd,arg){
+  switch(cmd){
+    case '/roll': return doRoll(arg||'1d20');
+    case '/sheet': return doSheet();
+    case '/save': return doSave(arg);
+    case '/load': return doLoad(arg);
+    case '/reset': return doReset();
+    case '/help': return doHelp();
+    default: addMsg('system',`Неизвестная команда: ${cmd}. Введите /help.`);
+  }
+}
+async function doRoll(expr){
+  if(busy)return;
+  try{
+    const res=await fetch('/api/roll',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({expr})});
+    const d=await res.json();
+    if(d.error){addMsg('system','Ошибка броска: '+d.error);return;}
+    const m=d.mod?(d.mod>0?'+'+d.mod:''+d.mod):'';
+    addHtmlMsg('dice',`🎲 <b>${d.expr}</b> → [${d.rolls.join(', ')}]${m} = <b>${d.total}</b>`);
+    messages.push({role:'user',content:`[[БРОСОК]] ${d.expr} → [${d.rolls.join(', ')}]${m} = ${d.total}. Опиши результат, успех/провал/осложнение. Не решай за игрока.`});
+    persist(); await callAI(messages);
+  }catch(e){addMsg('system','Ошибка: '+e.message);}
+}
+async function doSheet(){
+  if(!state)return;
+  const s=state.stats||{};
+  const inv=state.inventory.length?state.inventory.map(i=>`<span class="tag">${esc(i)}</span>`).join(''):'<span class="tag empty">пусто</span>';
+  const qs=state.quests.length?state.quests.map(q=>`<span class="tag">${esc(q)}</span>`).join(''):'<span class="tag empty">нет активных</span>';
+  const cd=state.conditions.length?state.conditions.map(c=>`<span class="tag">${esc(c)}</span>`).join(''):'<span class="tag empty">нет</span>';
+  modalContent.innerHTML=`<h3>📜 ${esc(state.name||'Пустой')}</h3>
+    <div class="kv"><span class="k">Уровень</span><span class="v">${state.level}</span></div>
+    <div class="kv"><span class="k">Опыт</span><span class="v">${state.xp} / ${state.xp_next}</span></div>
+    <div class="kv"><span class="k">Здоровье</span><span class="v">${state.hp} / ${state.max_hp}</span></div>
+    <div class="kv"><span class="k">Золото</span><span class="v">${state.gold}</span></div>
+    <h3 style="margin-top:8px;font-size:14px">Характеристики</h3>
+    <div class="stats-grid">${['str','dex','con','int','wis','cha'].map(k=>`<div class="stat-box"><div class="lbl">${k.toUpperCase()}</div><div class="val">${s[k]||10}</div></div>`).join('')}</div>
+    <h3 style="margin-top:8px;font-size:14px">Инвентарь</h3><div class="tags">${inv}</div>
+    <h3 style="margin-top:8px;font-size:14px">Квесты</h3><div class="tags">${qs}</div>
+    <h3 style="margin-top:8px;font-size:14px">Состояния</h3><div class="tags">${cd}</div>
+    <button class="btn primary" style="margin-top:8px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
+  modalEl.classList.add('open');
+}
+async function doSave(name){
+  if(!name){name=await promptModal('Название сохранения','game-'+Date.now());if(!name)return;}
+  try{const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,messages,state})});
+    const d=await res.json(); addMsg('system',`💾 Сохранено: «${d.name}»`);
+  }catch(e){addMsg('system','Ошибка сохранения: '+e.message);}
+}
+async function doLoad(name){
+  let saves;
+  try{saves=await (await fetch('/api/saves')).json();}
+  catch(e){addMsg('system','Ошибка: '+e.message);return;}
+  if(!saves.length){addMsg('system','Нет сохранений.');return;}
+  if(!name){name=await listModal('Выберите сохранение',saves);if(!name)return;}
+  try{
+    const res=await fetch('/api/load/'+encodeURIComponent(name));
+    if(!res.ok)throw new Error('не найдено');
+    const d=await res.json(); messages=d.messages||[]; state=d.state||{...EMPTY_STATE};
+    persist(); renderAll(); renderStatus(); addMsg('system',`📂 Загружено: «${name}»`);
+  }catch(e){addMsg('system','Ошибка: '+e.message);}
+}
+function doReset(){
+  if(!confirm('Начать новую игру? Текущая история будет потеряна.'))return;
+  messages=[]; state={...EMPTY_STATE}; persist(); chatEl.innerHTML=''; renderStatus(); showIntro();
+}
+function doHelp(){
+  addHtmlMsg('system','Команды:<br><code>/roll 1d20+3</code> — бросок<br>'+
+    '<code>/sheet</code> — лист<br><code>/save имя</code> — сохранить<br>'+
+    '<code>/load имя</code> — загрузить<br><code>/reset</code> — новая игра<br><br>'+
+    'Всё остальное — ваши действия.');
+}
+function renderAll(){
+  chatEl.innerHTML='';
+  messages.forEach(m=>{
+    if(m.role==='user'){const c=m.content.replace(/^\[\[(БРОСОК|СИСТЕМА)\]\]\s*/,'');addMsg('user',c);}
+    else if(m.role==='assistant'){addMsg('master',m.content);}
+  });
+}
+function showIntro(){
+  addMsg('system','Опишите персонажа, мир, тон и стартовую ситуацию.\n'+
+    'Например: «Я — вор-полуэльф Кейр, тёмное фэнтези, город на болоте. Начинаю в камере.»');
+}
+function promptModal(title,ph){
+  return new Promise(res=>{
+    modalContent.innerHTML=`<h3>${title}</h3><input id="modal-input" type="text" value="${ph}">
+      <div style="display:flex;gap:8px"><button class="btn" style="flex:1" id="modal-cancel">Отмена</button>
+      <button class="btn primary" style="flex:1" id="modal-ok">OK</button></div>`;
+    modalEl.classList.add('open');
+    const inp=document.getElementById('modal-input'); inp.focus(); inp.select();
+    const close=v=>{modalEl.classList.remove('open');res(v);};
+    document.getElementById('modal-cancel').onclick=()=>close(null);
+    document.getElementById('modal-ok').onclick=()=>close(inp.value.trim()||null);
+    inp.onkeydown=e=>{if(e.key==='Enter')close(inp.value.trim()||null);if(e.key==='Escape')close(null);};
+  });
+}
+function listModal(title,items){
+  return new Promise(res=>{
+    modalContent.innerHTML=`<h3>${title}</h3><div style="display:flex;flex-direction:column;gap:8px">`+
+      items.map(i=>`<div class="save-item" data-name="${i}">${i}</div>`).join('')+
+      `</div><button class="btn" id="modal-cancel">Закрыть</button>`;
+    modalEl.classList.add('open');
+    const close=v=>{modalEl.classList.remove('open');res(v);};
+    modalContent.querySelectorAll('.save-item').forEach(el=>el.onclick=()=>close(el.dataset.name));
+    document.getElementById('modal-cancel').onclick=()=>close(null);
+  });
+}
+function autosize(){inputEl.style.height='auto';inputEl.style.height=Math.min(inputEl.scrollHeight,120)+'px';}
+inputEl.addEventListener('input',autosize);
+inputEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(inputEl.value);}});
+sendBtn.onclick=()=>sendMessage(inputEl.value);
+document.getElementById('menu-btn').onclick=()=>{drawerEl.classList.add('open');drawerBg.classList.add('open');};
+drawerBg.onclick=()=>{drawerEl.classList.remove('open');drawerBg.classList.remove('open');};
+document.querySelectorAll('#drawer .btn').forEach(btn=>{
+  btn.onclick=()=>{
+    drawerEl.classList.remove('open'); drawerBg.classList.remove('open');
+    const a=btn.dataset.action;
+    if(a==='dice')doRoll('1d20');
+    else if(a==='dice-custom')promptModal('Бросок','1d20+3').then(v=>{if(v)doRoll(v);});
+    else if(a==='sheet')doSheet();
+    else if(a==='save')doSave();
+    else if(a==='load')doLoad();
+    else if(a==='reset')doReset();
+    else if(a==='help')doHelp();
+  };
+});
+function init(){
+  const saved=restore();
+  if(saved&&saved.messages.length){
+    messages=saved.messages; state=saved.state||{...EMPTY_STATE};
+    renderAll(); renderStatus(); addMsg('system','↩ История восстановлена. Продолжайте.');
+  }else{
+    state={...EMPTY_STATE}; renderStatus(); showIntro();
+  }
+  autosize();
+}
+init();
+</script>
+</body>
+</html>
