@@ -7,16 +7,9 @@
 <title>🎲 RPG ИИ-Мастер</title>
 <style>
   :root {
-    --bg-deep: #0f0d0c;
-    --bg-panel: #1a1614;
-    --bg-card: #24201d;
-    --border-subtle: #3a342f;
-    --text-primary: #e8e0d5;
-    --text-secondary: #a89f94;
-    --accent-gold: #c9a227;
-    --accent-crimson: #a63a3a;
-    --accent-sapphire: #3a6ea6;
-    --accent-green: #7fbf7f;
+    --bg-deep: #0f0d0c; --bg-panel: #1a1614; --bg-card: #24201d;
+    --border-subtle: #3a342f; --text-primary: #e8e0d5; --text-secondary: #a89f94;
+    --accent-gold: #c9a227; --accent-crimson: #a63a3a; --accent-sapphire: #3a6ea6;
     --font-serif: Georgia, 'Times New Roman', serif;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -70,6 +63,8 @@
   }
   .status-chip.dc-up { color: #d45a5a; border-color: #5a3a2a; background: #2a1f1a; }
   .status-chip.dc-down { color: #7fbf7f; border-color: #2a4a2a; background: #1f2a1f; }
+  .status-chip.pos { color: #b48cff; border-color: #4a3a6e; background: #1f1a2a; }
+  .status-chip.cover { color: #5a8ed4; border-color: #2a3a5a; background: #1a1f2a; }
   .bar-wrap { flex: 1; height: 6px; background: var(--bg-deep); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-subtle); }
   .bar-fill { height: 100%; transition: width 0.4s ease; border-radius: 4px; }
   .bar-hp { background: linear-gradient(90deg, #6b2020, #a63a3a, #d45a5a); }
@@ -137,8 +132,8 @@
     width: 26px; height: 26px; border-radius: 6px;
     background: transparent; border: 1px solid var(--border-subtle);
     color: var(--text-secondary); cursor: pointer; font-size: 13px;
-    margin-left: 8px; vertical-align: middle; transition: background 0.15s, color 0.15s;
-    padding: 0;
+    margin-left: 8px; vertical-align: middle;
+    transition: background 0.15s, color 0.15s; padding: 0;
   }
   .speak-btn:hover { background: var(--bg-card); color: var(--accent-gold); }
   .speak-btn.playing { color: var(--accent-gold); border-color: var(--accent-gold); animation: ttsPulse 1.2s infinite; }
@@ -200,6 +195,8 @@
   .tag.empty { color: #5a5a4e; font-style: italic; }
   .tag.skill { border-color: #4a3a6e; color: #b48cff; }
   .tag.ability { border-color: #5a3a2a; color: #e8c8a8; }
+  .tag.warn { border-color: #5a3a2a; color: #d45a5a; background: #2a1f1a; }
+  .tag.good { border-color: #2a4a2a; color: #7fbf7f; background: #1f2a1f; }
   .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .stat-box { background: var(--bg-card); padding: 10px; border-radius: 8px; text-align: center; border: 1px solid var(--border-subtle); }
   .stat-box .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -213,16 +210,11 @@
   .dc-box.up .dc-val { color: #d45a5a; }
   .dc-box.down .dc-val { color: #7fbf7f; }
   .dc-box .dc-val.neutral { color: var(--text-secondary); }
-
-  /* Умения */
   .ability-card {
     background: var(--bg-card); border: 1px solid var(--border-subtle);
     border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
   }
-  .ability-header {
-    display: flex; justify-content: space-between; align-items: baseline;
-    margin-bottom: 4px;
-  }
+  .ability-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
   .ability-name { font-weight: 600; color: var(--accent-gold); font-size: 14px; font-family: var(--font-serif); }
   .ability-uses { font-size: 12px; font-family: monospace; color: var(--text-secondary); }
   .ability-uses.empty { color: #d45a5a; }
@@ -230,6 +222,18 @@
   .ability-recharge { font-size: 10px; color: #5a5a4e; margin-top: 3px; font-style: italic; }
   .ability-card.passive { border-color: #4a3a6e; }
   .ability-card.passive .ability-name { color: #b48cff; }
+  .situation-box {
+    background: var(--bg-card); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px 12px; margin-top: 8px;
+  }
+  .situation-box .sit-row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0; font-size: 13px;
+  }
+  .situation-box .sit-row .lbl { color: var(--text-secondary); }
+  .situation-box .sit-row .val { color: var(--text-primary); font-weight: 500; }
+  .situation-box .sit-row .val.warn { color: #d45a5a; }
+  .situation-box .sit-row .val.good { color: #7fbf7f; }
 </style>
 </head>
 <body>
@@ -243,11 +247,12 @@
 
 <div id="quick-actions">
   <button class="quick-btn" data-quick="Я внимательно осматриваюсь вокруг. Что я вижу?">🔍 Осмотреться</button>
-  <button class="quick-btn" data-quick="Я осторожно иду вперёд, готовый к опасности.">🚶 Идти</button>
-  <button class="quick-btn" data-quick="Я обращаюсь к ближайшему NPC и внимательно слушаю его ответ.">🗣 Говорить</button>
+  <button class="quick-btn" data-quick="Я встаю и готовлюсь к действию.">🧍 Встать</button>
+  <button class="quick-btn" data-quick="Я прячусь за ближайшим укрытием.">🛡 В укрытие</button>
+  <button class="quick-btn" data-quick="Я иду вперёд, готовый к опасности.">🚶 Идти</button>
+  <button class="quick-btn" data-quick="Я обращаюсь к ближайшему NPC.">🗣 Говорить</button>
   <button class="quick-btn" data-quick="Я атакую ближайшего противника!">⚔ Атаковать</button>
-  <button class="quick-btn" data-quick="Я устраиваю короткий привал, чтобы восстановить силы.">🛌 Отдых</button>
-  <button class="quick-btn" data-quick="Я проверяю свои карманы и вещи.">🎒 Инвентарь</button>
+  <button class="quick-btn" data-quick="Я устраиваю короткий привал.">🛌 Отдых</button>
   <button class="quick-btn" data-quick="/roll 1d20">🎲 Кубик</button>
   <button class="quick-btn" data-quick="/skills">🎯 Умения</button>
 </div>
@@ -273,7 +278,7 @@
   <h2>Озвучка</h2>
   <div class="drawer-section">
     <button class="btn" id="tts-toggle-btn">🔊 Автоозвучка: выкл</button>
-    <button class="btn" id="tts-last-btn">🔈 Озвучить последний ответ</button>
+    <button class="btn" id="tts-last-btn">🔈 Озвучить последний</button>
     <button class="btn" id="tts-speed-btn">⏩ Скорость: 1.0×</button>
     <button class="btn" id="tts-voice-btn">🎙 Сменить голос</button>
     <button class="btn" id="tts-stop-btn">⏹ Остановить</button>
@@ -300,7 +305,7 @@ const modalEl = document.getElementById('modal');
 const modalContent = document.getElementById('modal-content');
 const statusEl = document.getElementById('status');
 
-const LS_KEY = 'rpg_session_v6';
+const LS_KEY = 'rpg_session_v7';
 const AVATAR_KEY = 'rpg_avatar_v1';
 const TTS_KEY = 'rpg_tts_v1';
 
@@ -312,16 +317,18 @@ const EMPTY_STATE = {
   proficiencies:[], skills:[], abilities:[],
   inventory:[], quests:[], conditions:[],
   relationships:[], faction_clocks:[],
-  dc_modifier:0, dc_modifier_reasons:[]
+  dc_modifier:0, dc_modifier_reasons:[],
+  position:"стоит", cover:"нет",
+  weapon_in_hand:"", restrained:false
 };
 
 const READY_WORLDS = [
   { id: 'forgotten_realms', name: 'Забытые Королевства', desc: 'Классическое D&D. Шахта Фандальвера, гоблины, драконы.', prompt: 'Мир: Забытые Королевства. Начни приключение "Шахта Фандальвера". Я и мои спутники сопровождаем караван дворфа Гундрена Роксвика в город Фандалин. Начинается всё с засады гоблинов на дороге. Опиши сцену, дай мне возможность действовать.' },
-  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Вокруг лес, холод и ощущение, что за нами наблюдают. Начни с прибытия в Баровию.' },
-  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать серию загадочных краж, связанных с запретными магическими технологиями. Начни с прибытия на место преступления.' },
-  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы получили заказ на перевозку таинственного груза через Астральное море. Начни с момента, когда мы обнаруживаем, что за нами следует неизвестный корабль.' },
-  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Позади остался город-государство тирана-колдуна. Впереди — бескрайняя пустыня, где вода на вес золота. Начни с того, как я и мои спутники пытаемся найти убежище на ночь.' },
-  { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG, Система пришла на Землю. Я — обычный человек, который только что получил интерфейс с уровнем и характеристиками. Вокруг начали появляться монстры. Начни с момента, когда я вижу первую Систему и первого монстра.' }
+  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Начни с прибытия в Баровию.' },
+  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать кражу запретных магических технологий. Начни с прибытия на место преступления.' },
+  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы перевозим таинственный груз через Астральное море. Начни с обнаружения неизвестного корабля позади.' },
+  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Впереди — бескрайняя пустыня. Начни с поиска убежища на ночь.' },
+  { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG. Система пришла на Землю. Я — обычный человек с интерфейсом уровня и характеристик. Вокруг появляются монстры. Начни с первой Системы и первого монстра.' }
 ];
 
 function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify({messages, state})); } catch(e){} }
@@ -336,6 +343,35 @@ function restore() {
 }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* =========================================================
+   POSITION / COVER / SITUATION HELPERS
+   ========================================================= */
+const POSITION_LABELS = {
+  'стоит': { icon: '🧍', label: 'Стоит', mod: 0 },
+  'сидит': { icon: '🪑', label: 'Сидит', mod: 1 },
+  'на коленях': { icon: '🧎', label: 'На коленях', mod: 1 },
+  'лежит': { icon: '🛌', label: 'Лежит', mod: 5 },
+  'верхом': { icon: '🐎', label: 'Верхом', mod: 1 },
+  'плавает': { icon: '🏊', label: 'Плавает', mod: 3 },
+  'висит': { icon: '🪜', label: 'Висит', mod: 3 },
+  'схвачен': { icon: '🤝', label: 'Схвачен', mod: 5 },
+  'обездвижен': { icon: '⛓', label: 'Обездвижен', mod: 99 }
+};
+
+const COVER_LABELS = {
+  'нет': { icon: '', label: 'Без укрытия', mod: 0 },
+  'половинное': { icon: '🛡½', label: 'Укрытие ½', mod: 2 },
+  'три_четверти': { icon: '🛡¾', label: 'Укрытие ¾', mod: 5 },
+  'полное': { icon: '🛡✓', label: 'Полное укрытие', mod: 99 }
+};
+
+function getPositionInfo(pos) {
+  return POSITION_LABELS[pos] || { icon: '❔', label: pos || '—', mod: 0 };
+}
+function getCoverInfo(cov) {
+  return COVER_LABELS[cov] || { icon: '', label: cov || '—', mod: 0 };
 }
 
 /* =========================================================
@@ -493,7 +529,7 @@ function ttsClean(text) {
   return text
     .replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '')
     .replace(/\*+.*?\*+/g, '')
-    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯]/g, '')
+    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
     .replace(/\s+/g, ' ').trim();
@@ -613,6 +649,14 @@ function renderStatus() {
     const sign = dc > 0 ? '+' : '';
     dcChip = `<span class="status-chip ${cls}" title="${esc((state.dc_modifier_reasons||[]).join(', '))}">🎯 Сложность ${sign}${dc}</span>`;
   }
+  const posInfo = getPositionInfo(state.position);
+  const covInfo = getCoverInfo(state.cover);
+  const posChip = state.position && state.position !== 'стоит'
+    ? `<span class="status-chip pos">${posInfo.icon} ${esc(posInfo.label)}</span>` : '';
+  const covChip = state.cover && state.cover !== 'нет'
+    ? `<span class="status-chip cover">${covInfo.icon} ${esc(covInfo.label)}</span>` : '';
+  const restrChip = state.restrained
+    ? `<span class="status-chip dc-up">⛓ Связан</span>` : '';
   statusEl.innerHTML = `
     <div class="status-top">
       <div class="avatar-wrap" title="Нажмите, чтобы увидеть портрет">
@@ -624,6 +668,9 @@ function renderStatus() {
         <div class="status-chips">
           <span class="status-chip">Ур. ${state.level}</span>
           <span class="status-chip">💰 ${state.gold}</span>
+          ${posChip}
+          ${covChip}
+          ${restrChip}
           ${dcChip}
         </div>
       </div>
@@ -844,7 +891,7 @@ async function doSheet() {
   const dcBoxCls = dc > 0 ? 'up' : (dc < 0 ? 'down' : '');
   const dcSign = dc > 0 ? '+' : '';
   const dcReasons = (state.dc_modifier_reasons || []).length
-    ? state.dc_modifier_reasons.map(r => `<span class="tag">${esc(r)}</span>`).join('')
+    ? state.dc_modifier_reasons.map(r => `<span class="tag warn">${esc(r)}</span>`).join('')
     : '<span class="tag empty">нет модификаторов</span>';
   const dcBox = `
     <div class="dc-box ${dcBoxCls}">
@@ -853,6 +900,20 @@ async function doSheet() {
         <span class="dc-val ${dc === 0 ? 'neutral' : ''}">${dc === 0 ? '0' : dcSign + dc}</span>
       </div>
       <div class="tags">${dcReasons}</div>
+    </div>`;
+
+  const posInfo = getPositionInfo(state.position);
+  const covInfo = getCoverInfo(state.cover);
+  const posWarn = (posInfo.mod >= 3) ? 'warn' : (posInfo.mod === 0 ? '' : 'warn');
+  const situationBox = `
+    <div class="situation-box">
+      <div style="color:var(--text-secondary);font-size:12px;margin-bottom:6px">📍 Положение и обстановка</div>
+      <div class="sit-row"><span class="lbl">Позиция</span><span class="val ${posWarn}">${posInfo.icon} ${esc(posInfo.label)}</span></div>
+      ${posInfo.mod !== 0 ? `<div class="sit-row"><span class="lbl">Штраф к физ.</span><span class="val warn">+${posInfo.mod}</span></div>` : ''}
+      <div class="sit-row"><span class="lbl">Укрытие</span><span class="val">${covInfo.icon || '—'} ${esc(covInfo.label)}</span></div>
+      ${covInfo.mod !== 0 ? `<div class="sit-row"><span class="lbl">Защита</span><span class="val good">+${covInfo.mod} к DC попасть</span></div>` : ''}
+      <div class="sit-row"><span class="lbl">В руках</span><span class="val">${esc(state.weapon_in_hand || '—')}</span></div>
+      ${state.restrained ? `<div class="sit-row"><span class="lbl">Связан</span><span class="val warn">⛓ Да — физ. действия проваливаются</span></div>` : ''}
     </div>`;
 
   const statMod = (val) => {
@@ -877,6 +938,7 @@ async function doSheet() {
     <div class="stats-grid">${['str','dex','con','int','wis','cha'].map(k =>
       `<div class="stat-box"><div class="lbl">${k.toUpperCase()}</div><div class="val">${s[k] || 10}</div><div class="mod">${statMod(s[k] || 10)}</div></div>`
     ).join('')}</div>
+    ${situationBox}
     ${dcBox}
     <h3 style="margin-top:12px;font-size:15px">Инвентарь</h3><div class="tags">${inv}</div>
     <h3 style="margin-top:12px;font-size:15px">Квесты</h3><div class="tags">${qs}</div>
@@ -889,7 +951,7 @@ async function doSheet() {
 }
 
 /* =========================================================
-   SKILLS — отдельная модалка: владения, навыки, умения
+   SKILLS
    ========================================================= */
 async function doSkills() {
   if (!state) return;
@@ -908,9 +970,7 @@ async function doSkills() {
   const abilities = (state.abilities || []).length
     ? state.abilities.map(a => {
         const isPassive = a.recharge === 'passive' || !a.uses_max;
-        const usesText = isPassive
-          ? '∞'
-          : `${a.uses_left ?? a.uses_max}/${a.uses_max}`;
+        const usesText = isPassive ? '∞' : `${a.uses_left ?? a.uses_max}/${a.uses_max}`;
         const isEmpty = !isPassive && (a.uses_left || 0) === 0;
         const rechargeLabel = {
           'passive': 'пассивное',
@@ -1002,7 +1062,7 @@ function doHelp() {
     '<code>/sheet</code> — полный лист<br><code>/skills</code> — умения и навыки<br>' +
     '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
     '<code>/reset</code> — новая игра<br><br>' +
-    'Или тапайте по кнопкам быстрых действий над полем ввода.');
+    'Мастер сам учитывает положение (лежит/сидит/схвачен), укрытие и оружие в руке при назначении DC.');
 }
 
 function renderAll() {
@@ -1021,8 +1081,8 @@ function renderAll() {
 
 function showIntro() {
   addMsg('system', 'Опишите персонажа, мир, тон и стартовую ситуацию.\n' +
-    'Например: «Я — эльф-плут Кейр, предыстория — Преступник. Тёмное фэнтези, город на болоте.»\n\n' +
-    'Мастер сам выставит характеристики, навыки и умения.\n' +
+    'Например: «Я — эльф-плут Кейр, Преступник. Тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
+    'Мастер сам выставит характеристики, навыки, умения и учтёт положение тела.\n' +
     'Или выберите готовый мир в меню ☰ → «Готовые миры».');
 }
 
@@ -1154,6 +1214,10 @@ function init() {
     if (typeof state.race !== 'string') state.race = '';
     if (typeof state.class !== 'string') state.class = '';
     if (typeof state.background !== 'string') state.background = '';
+    if (typeof state.position !== 'string') state.position = 'стоит';
+    if (typeof state.cover !== 'string') state.cover = 'нет';
+    if (typeof state.weapon_in_hand !== 'string') state.weapon_in_hand = '';
+    if (typeof state.restrained !== 'boolean') state.restrained = false;
     renderAll(); renderStatus();
     addMsg('system', '↩ История восстановлена. Продолжайте.');
   } else {
