@@ -231,6 +231,15 @@
   .situation-box .sit-row .val { color: var(--text-primary); font-weight: 500; }
   .situation-box .sit-row .val.warn { color: #d45a5a; }
   .situation-box .sit-row .val.good { color: #7fbf7f; }
+  .dice-preset {
+    flex: 1 1 auto; min-width: 62px; padding: 8px 10px;
+    background: var(--bg-card); color: var(--text-primary);
+    border: 1px solid var(--border-subtle); border-radius: 8px;
+    cursor: pointer; font-family: monospace; font-size: 14px;
+    transition: background 0.15s;
+  }
+  .dice-preset:active { background: #3a342f; }
+  .dice-preset.active { border-color: var(--accent-gold); color: var(--accent-gold); }
 </style>
 </head>
 <body>
@@ -825,7 +834,6 @@ async function doSheet() {
   if (!state) return;
   const s = state.stats || {};
 
-  // Квесты: строки → объекты
   const quests = (state.quests || []).map(q => {
     if (typeof q === 'string') {
       return { id: 'old-' + q, name: q, type: 'side', status: 'active',
@@ -1063,7 +1071,8 @@ function doHelp() {
     '<code>/sheet</code> — полный лист<br><code>/skills</code> — умения и навыки<br>' +
     '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
     '<code>/reset</code> — новая игра<br><br>' +
-    'Мастер учитывает положение, укрытие и оружие в руке при назначении DC.');
+    'Мастер учитывает положение, укрытие и оружие в руке при назначении DC.<br>' +
+    'Кнопка 🎲 Свой в панели быстрого доступа — пресеты d4–d100 и кастомная формула.');
 }
 function renderAll() {
   chatEl.innerHTML = '';
@@ -1108,6 +1117,44 @@ function renderWorlds() {
     };
   });
 }
+
+/* =========================================================
+   DICE MODAL — пресеты + кастомная формула
+   ========================================================= */
+function rollModal() {
+  return new Promise(res => {
+    const presets = ['1d4', '1d6', '1d8', '1d10', '1d12', '1d20', '2d6', '1d100'];
+    modalContent.innerHTML = `<h3>🎲 Бросок кубика</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${presets.map(p => `<button class="dice-preset" data-preset="${p}">${p}</button>`).join('')}
+      </div>
+      <input id="modal-input" type="text" value="1d20" placeholder="1d20+3">
+      <div style="font-size:11px;color:var(--text-secondary)">Формат: NdM±K — например, 2d6+1, 1d20-2</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" style="flex:1" id="modal-cancel">Отмена</button>
+        <button class="btn primary" style="flex:1" id="modal-ok">Бросить</button>
+      </div>`;
+    modalEl.classList.add('open');
+    const inp = document.getElementById('modal-input');
+    inp.focus(); inp.select();
+    const close = v => { modalEl.classList.remove('open'); res(v); };
+    modalContent.querySelectorAll('[data-preset]').forEach(b => {
+      b.onclick = () => {
+        inp.value = b.dataset.preset;
+        modalContent.querySelectorAll('[data-preset]').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        inp.focus();
+      };
+    });
+    document.getElementById('modal-cancel').onclick = () => close(null);
+    document.getElementById('modal-ok').onclick = () => close(inp.value.trim() || null);
+    inp.onkeydown = e => {
+      if (e.key === 'Enter') close(inp.value.trim() || null);
+      if (e.key === 'Escape') close(null);
+    };
+  });
+}
+
 function promptModal(title, ph) {
   return new Promise(res => {
     modalContent.innerHTML = `<h3>${title}</h3>
@@ -1156,18 +1203,28 @@ inputEl.addEventListener('keydown', e => {
 });
 sendBtn.onclick = () => sendMessage(inputEl.value);
 
+/* Быстрые кнопки над полем ввода */
 document.querySelectorAll('.quick-btn').forEach(btn => {
   btn.onclick = () => {
     if (busy) return;
     const action = btn.dataset.quick;
-    if (action.startsWith('/')) {
+    if (action && action.startsWith('/')) {
       const [c, ...r] = action.split(' ');
       handleCommand(c.toLowerCase(), r.join(' '));
-    } else {
+    } else if (action) {
       sendMessage(action);
     }
   };
 });
+
+/* Отдельный обработчик для «Свой бросок» — у него нет data-quick */
+const quickCustomRoll = document.getElementById('quick-custom-roll');
+if (quickCustomRoll) {
+  quickCustomRoll.onclick = () => {
+    if (busy) return;
+    rollModal().then(v => { if (v) doRoll(v); });
+  };
+}
 
 document.getElementById('menu-btn').onclick = () => {
   drawerEl.classList.add('open');
@@ -1183,7 +1240,7 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
     drawerBg.classList.remove('open');
     const a = btn.dataset.action;
     if (a === 'dice') doRoll('1d20');
-    else if (a === 'dice-custom') promptModal('Бросок', '1d20+3').then(v => { if (v) doRoll(v); });
+    else if (a === 'dice-custom') rollModal().then(v => { if (v) doRoll(v); });
     else if (a === 'sheet') doSheet();
     else if (a === 'skills') doSkills();
     else if (a === 'save') doSave();
@@ -1198,7 +1255,6 @@ function init() {
   if (saved && saved.messages.length) {
     messages = saved.messages;
     state = saved.state || {...EMPTY_STATE};
-    // Совместимость
     if (!Array.isArray(state.relationships)) state.relationships = [];
     if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
     if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
@@ -1214,7 +1270,6 @@ function init() {
     if (typeof state.cover !== 'string') state.cover = 'нет';
     if (typeof state.weapon_in_hand !== 'string') state.weapon_in_hand = '';
     if (typeof state.restrained !== 'boolean') state.restrained = false;
-    // Квесты: строки → объекты
     if (Array.isArray(state.quests)) {
       state.quests = state.quests.map(q => {
         if (typeof q === 'string') {
