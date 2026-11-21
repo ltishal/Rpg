@@ -53,10 +53,7 @@
   }
   .avatar-wrap:active { transform: scale(0.95); }
   .avatar-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .avatar-placeholder {
-    color: var(--accent-gold); font-size: 20px;
-    font-family: var(--font-serif); font-weight: bold;
-  }
+  .avatar-placeholder { color: var(--accent-gold); font-size: 20px; font-family: var(--font-serif); font-weight: bold; }
   .avatar-wrap.loading::after {
     content: ''; position: absolute; inset: 0;
     border: 2px solid transparent; border-top-color: var(--accent-gold);
@@ -64,25 +61,18 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .status-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-  .status-name {
-    font-weight: 700; color: var(--accent-gold);
-    font-family: var(--font-serif); font-size: 15px;
-  }
+  .status-name { font-weight: 700; color: var(--accent-gold); font-family: var(--font-serif); font-size: 15px; }
   .status-chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .status-chip {
     background: var(--bg-card); padding: 2px 8px; border-radius: 6px;
     color: var(--text-secondary); font-size: 11px;
     border: 1px solid var(--border-subtle);
   }
-  .bar-wrap {
-    flex: 1; height: 6px; background: var(--bg-deep);
-    border-radius: 4px; overflow: hidden; border: 1px solid var(--border-subtle);
-  }
+  .bar-wrap { flex: 1; height: 6px; background: var(--bg-deep); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-subtle); }
   .bar-fill { height: 100%; transition: width 0.4s ease; border-radius: 4px; }
   .bar-hp { background: linear-gradient(90deg, #6b2020, #a63a3a, #d45a5a); }
   .bar-xp { background: linear-gradient(90deg, #2a4a6b, #3a6ea6, #5a8ed4); }
   .bar-label { min-width: 55px; text-align: right; color: var(--text-secondary); font-size: 11px; font-family: monospace; }
-
   #quick-actions {
     display: flex; gap: 6px; overflow-x: auto;
     padding: 8px 14px; background: rgba(15, 13, 12, 0.95);
@@ -99,7 +89,6 @@
   }
   .quick-btn:active { background: #3a342f; transform: scale(0.95); }
   .quick-btn:disabled { opacity: 0.4; cursor: default; }
-
   #chat {
     flex: 1; overflow-y: auto; padding: 16px;
     display: flex; flex-direction: column; gap: 14px;
@@ -111,15 +100,13 @@
     animation: fadeIn 0.25s ease-out;
   }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-  .msg.user {
-    align-self: flex-end; background: var(--bg-card);
-    border: 1px solid var(--border-subtle); border-bottom-right-radius: 4px;
-  }
+  .msg.user { align-self: flex-end; background: var(--bg-card); border: 1px solid var(--border-subtle); border-bottom-right-radius: 4px; }
   .msg.master {
     align-self: flex-start; background: transparent;
     padding: 4px 0 4px 14px; font-family: var(--font-serif);
     font-size: 16px; color: #d8cec2; max-width: 100%;
     border-left: 3px solid var(--accent-gold);
+    position: relative;
   }
   .msg.system {
     align-self: center; font-size: 13px; color: var(--text-secondary);
@@ -145,6 +132,23 @@
   .typing-indicator::after { content: '▍'; animation: blink 1s infinite; color: var(--accent-gold); }
   @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
 
+  /* === TTS === */
+  .speak-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px;
+    background: transparent; border: 1px solid var(--border-subtle);
+    color: var(--text-secondary); cursor: pointer; font-size: 13px;
+    margin-left: 8px; vertical-align: middle; transition: background 0.15s, color 0.15s;
+    padding: 0;
+  }
+  .speak-btn:hover { background: var(--bg-card); color: var(--accent-gold); }
+  .speak-btn.playing {
+    color: var(--accent-gold); border-color: var(--accent-gold);
+    animation: ttsPulse 1.2s infinite;
+  }
+  @keyframes ttsPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .tts-active { color: var(--accent-gold); border-color: var(--accent-gold); }
+
   #input-bar {
     display: flex; gap: 8px; padding: 12px 14px;
     padding-bottom: max(12px, env(safe-area-inset-bottom));
@@ -168,21 +172,10 @@
     flex-shrink: 0; transition: opacity 0.2s;
   }
   #send-btn:disabled { background: #4a4440; opacity: 0.5; }
-
-  .btn {
-    background: var(--bg-card); color: var(--text-primary);
-    border: 1px solid var(--border-subtle); border-radius: 8px;
-    padding: 10px 14px; font-size: 14px; cursor: pointer;
-    font-family: var(--font-sans); transition: background 0.2s;
-  }
+  .btn { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 14px; font-size: 14px; cursor: pointer; font-family: var(--font-sans); transition: background 0.2s; }
   .btn:active { background: #3a342f; }
   .btn.primary { background: var(--accent-gold); border-color: var(--accent-gold); color: #1a1614; font-weight: 600; }
-  .icon-btn {
-    width: 40px; height: 40px; border-radius: 8px;
-    background: var(--bg-card); border: 1px solid var(--border-subtle);
-    color: var(--text-primary); font-size: 18px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-  }
+  .icon-btn { width: 40px; height: 40px; border-radius: 8px; background: var(--bg-card); border: 1px solid var(--border-subtle); color: var(--text-primary); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   #drawer-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.7); opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 10; }
   #drawer-bg.open { opacity: 1; pointer-events: auto; }
   #drawer {
@@ -196,21 +189,11 @@
   #drawer h2 { font-size: 12px; color: var(--accent-gold); margin: 12px 0 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; }
   .drawer-section { display: flex; flex-direction: column; gap: 8px; }
   #drawer .btn { width: 100%; text-align: left; padding: 12px 16px; font-size: 15px; }
-
   #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
   #modal.open { display: flex; }
-  .modal-content {
-    background: var(--bg-panel); border: 1px solid var(--border-subtle);
-    border-radius: 14px; padding: 24px; width: 100%; max-width: 440px;
-    max-height: 85vh; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 14px;
-  }
+  .modal-content { background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 24px; width: 100%; max-width: 440px; max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
   .modal-content h3 { margin: 0 0 4px; font-size: 18px; font-family: var(--font-serif); color: var(--accent-gold); }
-  .modal-content input {
-    width: 100%; background: var(--bg-deep); border: 1px solid var(--border-subtle);
-    color: var(--text-primary); border-radius: 8px; padding: 12px 14px;
-    font-size: 16px; font-family: var(--font-sans); outline: none;
-  }
+  .modal-content input { width: 100%; background: var(--bg-deep); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 8px; padding: 12px 14px; font-size: 16px; font-family: var(--font-sans); outline: none; }
   .save-item { padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; cursor: pointer; font-size: 14px; }
   .save-item:active { background: #3a342f; }
   .kv { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
@@ -224,11 +207,7 @@
   .stat-box { background: var(--bg-card); padding: 10px; border-radius: 8px; text-align: center; border: 1px solid var(--border-subtle); }
   .stat-box .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
   .stat-box .val { font-size: 18px; font-weight: 700; color: var(--accent-gold); margin-top: 4px; font-family: var(--font-serif); }
-  .avatar-large {
-    display: block; margin: 0 auto; width: 220px; height: 220px;
-    border-radius: 50%; border: 3px solid var(--accent-gold);
-    object-fit: cover; background: var(--bg-deep);
-  }
+  .avatar-large { display: block; margin: 0 auto; width: 220px; height: 220px; border-radius: 50%; border: 3px solid var(--accent-gold); object-fit: cover; background: var(--bg-deep); }
 </style>
 </head>
 <body>
@@ -268,6 +247,14 @@
   </div>
   <h2>Готовые миры</h2>
   <div class="drawer-section" id="worlds-section"></div>
+  <h2>Озвучка</h2>
+  <div class="drawer-section">
+    <button class="btn" id="tts-toggle-btn">🔊 Автоозвучка: выкл</button>
+    <button class="btn" id="tts-last-btn">🔈 Озвучить последний ответ</button>
+    <button class="btn" id="tts-speed-btn">⏩ Скорость: 1.0×</button>
+    <button class="btn" id="tts-voice-btn">🎙 Сменить голос</button>
+    <button class="btn" id="tts-stop-btn">⏹ Остановить</button>
+  </div>
   <h2>Игра</h2>
   <div class="drawer-section">
     <button class="btn" data-action="save">💾 Сохранить</button>
@@ -292,6 +279,7 @@ const statusEl = document.getElementById('status');
 
 const LS_KEY = 'rpg_session_v4';
 const AVATAR_KEY = 'rpg_avatar_v1';
+const TTS_KEY = 'rpg_tts_v1';
 
 const EMPTY_STATE = {
   name:"Пустой", level:1, xp:0, xp_next:100,
@@ -369,7 +357,6 @@ function generateAvatar(force) {
   if (!state || !state.name || state.name === 'Пустой') return;
   const wrap = document.querySelector('.avatar-wrap');
   if (!wrap) return;
-
   if (!force) {
     const cached = cachedAvatarFor(state.name);
     if (cached) {
@@ -377,14 +364,11 @@ function generateAvatar(force) {
       return;
     }
   }
-
   wrap.innerHTML = '<div class="avatar-placeholder">?</div>';
   wrap.classList.add('loading');
-
   const prompt = buildAvatarPrompt(state);
   const seed = Math.floor(Math.random() * 999999);
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=256&height=256&seed=${seed}&nologo=true&model=flux&enhance=true`;
-
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.onload = () => {
@@ -435,6 +419,176 @@ function openAvatarModal() {
 }
 
 /* =========================================================
+   TTS
+   ========================================================= */
+const tts = {
+  enabled: false,
+  voice: null,
+  rate: 1.0,
+  speaking: false,
+  lastText: '',
+  available: ('speechSynthesis' in window)
+};
+
+function ttsLoad() {
+  if (!tts.available) return;
+  const pickVoice = () => {
+    const voices = speechSynthesis.getVoices();
+    if (!voices.length) return;
+    const savedName = localStorage.getItem('rpg_tts_voice_name');
+    if (savedName) {
+      const v = voices.find(x => x.name === savedName);
+      if (v) { tts.voice = v; ttsUpdateUI(); return; }
+    }
+    const ru = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('ru'));
+    tts.voice = ru || voices[0];
+    ttsUpdateUI();
+  };
+  pickVoice();
+  speechSynthesis.onvoiceschanged = pickVoice;
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(TTS_KEY) || '{}');
+    if (typeof saved.enabled === 'boolean') tts.enabled = saved.enabled;
+    if (typeof saved.rate === 'number') tts.rate = saved.rate;
+  } catch(e){}
+  ttsUpdateUI();
+}
+
+function ttsSave() {
+  try {
+    localStorage.setItem(TTS_KEY, JSON.stringify({
+      enabled: tts.enabled,
+      rate: tts.rate
+    }));
+    if (tts.voice) localStorage.setItem('rpg_tts_voice_name', tts.voice.name);
+  } catch(e){}
+}
+
+function ttsClean(text) {
+  return text
+    .replace(/\[\[.*?\]\]/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\*+.*?\*+/g, '')
+    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒]/g, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function ttsSpeak(text, btn) {
+  if (!tts.available) {
+    addMsg('system', 'Озвучка не поддерживается этим браузером.');
+    return;
+  }
+  const clean = ttsClean(text);
+  if (!clean) return;
+  if (tts.speaking) speechSynthesis.cancel();
+
+  const utt = new SpeechSynthesisUtterance(clean);
+  if (tts.voice) utt.voice = tts.voice;
+  utt.lang = tts.voice ? tts.voice.lang : 'ru-RU';
+  utt.rate = tts.rate;
+  utt.pitch = 1.0;
+
+  if (btn) btn.classList.add('playing');
+  utt.onstart = () => { tts.speaking = true; };
+  utt.onend = () => { tts.speaking = false; if (btn) btn.classList.remove('playing'); };
+  utt.onerror = () => { tts.speaking = false; if (btn) btn.classList.remove('playing'); };
+
+  speechSynthesis.speak(utt);
+}
+
+function ttsStop() {
+  if (tts.available) speechSynthesis.cancel();
+  tts.speaking = false;
+  document.querySelectorAll('.speak-btn.playing').forEach(b => b.classList.remove('playing'));
+}
+
+function ttsUpdateUI() {
+  const btn = document.getElementById('tts-toggle-btn');
+  if (btn) {
+    btn.textContent = `🔊 Автоозвучка: ${tts.enabled ? 'вкл' : 'выкл'}`;
+    btn.classList.toggle('tts-active', tts.enabled);
+  }
+  const sp = document.getElementById('tts-speed-btn');
+  if (sp) sp.textContent = `⏩ Скорость: ${tts.rate.toFixed(1)}×`;
+  const vb = document.getElementById('tts-voice-btn');
+  if (vb) {
+    if (tts.voice) {
+      const short = tts.voice.name.length > 22 ? tts.voice.name.substring(0, 22) + '…' : tts.voice.name;
+      vb.textContent = `🎙 Голос: ${short}`;
+    } else {
+      vb.textContent = '🎙 Голос: не выбран';
+    }
+  }
+}
+
+function ttsPickVoice() {
+  if (!tts.available) return;
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) {
+    addMsg('system', 'Голоса ещё загружаются. Попробуйте через пару секунд.');
+    return;
+  }
+  // Приоритет: русские голоса
+  const ruVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('ru'));
+  const list = (ruVoices.length ? ruVoices : voices).slice(0, 20);
+
+  return new Promise(res => {
+    modalContent.innerHTML = `<h3>🎙 Выбор голоса</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto">
+        ${list.map((v, i) => `
+          <div class="save-item" data-i="${i}" style="${tts.voice && tts.voice.name === v.name ? 'border-color:var(--accent-gold)' : ''}">
+            <div style="color:var(--text-primary);font-size:14px">${esc(v.name)}</div>
+            <div style="color:var(--text-secondary);font-size:11px">${esc(v.lang)}${v.default ? ' · по умолчанию' : ''}</div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn" id="modal-cancel">Закрыть</button>`;
+    modalEl.classList.add('open');
+    const close = v => { modalEl.classList.remove('open'); res(v); };
+    modalContent.querySelectorAll('.save-item').forEach(el => {
+      el.onclick = () => {
+        const idx = parseInt(el.dataset.i);
+        tts.voice = list[idx];
+        ttsSave(); ttsUpdateUI();
+        close(tts.voice);
+        addMsg('system', `Голос: ${tts.voice.name}`);
+      };
+    });
+    document.getElementById('modal-cancel').onclick = () => close(null);
+  });
+}
+
+document.getElementById('tts-toggle-btn').onclick = () => {
+  tts.enabled = !tts.enabled;
+  ttsSave(); ttsUpdateUI();
+  if (!tts.enabled) ttsStop();
+  // На iOS Safari первый звук требует явного жеста — короткий пустой utterance разблокирует
+  if (tts.enabled && tts.available) {
+    try {
+      const unlock = new SpeechSynthesisUtterance(' ');
+      unlock.volume = 0;
+      speechSynthesis.speak(unlock);
+    } catch(e){}
+  }
+};
+document.getElementById('tts-last-btn').onclick = () => {
+  if (tts.lastText) ttsSpeak(tts.lastText, null);
+  else addMsg('system', 'Ещё нет ответа мастера.');
+};
+document.getElementById('tts-speed-btn').onclick = () => {
+  const speeds = [0.8, 1.0, 1.2, 1.5, 1.8];
+  const i = speeds.findIndex(s => Math.abs(s - tts.rate) < 0.01);
+  tts.rate = speeds[(i + 1) % speeds.length];
+  ttsSave(); ttsUpdateUI();
+};
+document.getElementById('tts-voice-btn').onclick = () => ttsPickVoice();
+document.getElementById('tts-stop-btn').onclick = () => ttsStop();
+
+/* =========================================================
    STATUS
    ========================================================= */
 function renderStatus() {
@@ -464,21 +618,49 @@ function renderStatus() {
       <div class="bar-wrap"><div class="bar-fill bar-xp" style="width:${xpPct}%"></div></div>
       <span class="bar-label">${state.xp}/${state.xp_next}</span></div>
     ${c ? `<div class="status-row" style="font-size:12px;color:var(--text-secondary)">${c}</div>` : ''}`;
-
   const wrap = statusEl.querySelector('.avatar-wrap');
   if (wrap) wrap.onclick = openAvatarModal;
   maybeGenerateAvatar();
 }
 
 /* =========================================================
-   CHAT
+   CHAT — addMsg с кнопкой 🔊
    ========================================================= */
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
+
 function addMsg(role, text) {
   const d = document.createElement('div');
-  d.className = 'msg ' + role; d.textContent = text;
-  chatEl.appendChild(d); scrollBottom(); return d;
+  d.className = 'msg ' + role;
+
+  if (role === 'master') {
+    const textSpan = document.createElement('span');
+    textSpan.textContent = text;
+    d.appendChild(textSpan);
+
+    if (tts.available) {
+      const btn = document.createElement('button');
+      btn.className = 'speak-btn';
+      btn.textContent = '🔊';
+      btn.title = 'Озвучить';
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (btn.classList.contains('playing')) {
+          ttsStop();
+        } else {
+          ttsSpeak(text, btn);
+        }
+      };
+      d.appendChild(btn);
+    }
+  } else {
+    d.textContent = text;
+  }
+
+  chatEl.appendChild(d);
+  scrollBottom();
+  return d;
 }
+
 function addHtmlMsg(role, html) {
   const d = document.createElement('div');
   d.className = 'msg ' + role; d.innerHTML = html;
@@ -491,6 +673,8 @@ function addHtmlMsg(role, html) {
 async function callAI(msgs) {
   busy = true; sendBtn.disabled = true;
   document.querySelectorAll('.quick-btn').forEach(b => b.disabled = true);
+  // остановить текущую озвучку, если играет
+  if (tts.speaking) ttsStop();
 
   const md = document.createElement('div');
   md.className = 'msg master typing-indicator';
@@ -507,7 +691,7 @@ async function callAI(msgs) {
     while (true) {
       const {done, value} = await reader.read();
       if (done) break;
-      const c = dec.decode(value, {stream: true});
+      const c = dec.decode(value, { stream: true});
       if (!c) continue;
       full += c; md.textContent = full; scrollBottom();
     }
@@ -520,6 +704,18 @@ async function callAI(msgs) {
   if (full.trim()) {
     messages.push({role: 'assistant', content: full});
     persist();
+    // Превратить финальный master div в сообщение с кнопкой 🔊
+    md.remove();
+    const finalMsg = addMsg('master', full);
+
+    tts.lastText = full;
+    if (tts.enabled && tts.available) {
+      // Дать DOM обновиться и найти кнопку
+      setTimeout(() => {
+        const btn = finalMsg.querySelector('.speak-btn');
+        ttsSpeak(full, btn);
+      }, 60);
+    }
     await updateState();
   }
   busy = false; sendBtn.disabled = false;
@@ -575,12 +771,10 @@ function handleCommand(cmd, arg) {
 
 async function doRoll(expr) {
   if (busy) return;
-
   const animDiv = addHtmlMsg('dice',
     `<span class="dice-emoji">🎲</span> Бросок ${esc(expr)}...`);
   await new Promise(r => setTimeout(r, 450));
   animDiv.remove();
-
   try {
     const res = await fetch('/api/roll', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -596,9 +790,6 @@ async function doRoll(expr) {
   } catch(e) { addMsg('system', 'Ошибка: ' + e.message); }
 }
 
-/* =========================================================
-   SHEET — с отношениями и часами фракций
-   ========================================================= */
 async function doSheet() {
   if (!state) return;
   const s = state.stats || {};
@@ -611,7 +802,6 @@ async function doSheet() {
   const cd = (state.conditions || []).length
     ? state.conditions.map(c => `<span class="tag">${esc(c)}</span>`).join('')
     : '<span class="tag empty">нет</span>';
-
   const relColor = (att) => {
     if (att === 'дружелюбен' || att === 'предан') return '#7fbf7f';
     if (att === 'враждебен') return '#d45a5a';
@@ -623,7 +813,6 @@ async function doSheet() {
         `<span class="tag" style="border-color:${relColor(r.attitude)};color:${relColor(r.attitude)}">${esc(r.name)} — ${esc(r.attitude)}${r.note ? ' (' + esc(r.note) + ')' : ''}</span>`
       ).join('')
     : '<span class="tag empty">никого нет</span>';
-
   const clocks = (state.faction_clocks || []).length
     ? state.faction_clocks.map(c => {
         const pct = Math.round((c.progress || 0) / (c.max || 6) * 100);
@@ -638,12 +827,10 @@ async function doSheet() {
         </div>`;
       }).join('')
     : '<div class="tag empty">тихо</div>';
-
   const cached = cachedAvatarFor(state.name);
   const avatar = cached
     ? `<img class="avatar-large" src="${cached.url}" alt="${esc(state.name)}" style="width:140px;height:140px">`
     : '';
-
   modalContent.innerHTML = `
     ${avatar}
     <h3>📜 ${esc(state.name || 'Пустой')}</h3>
@@ -664,9 +851,6 @@ async function doSheet() {
   modalEl.classList.add('open');
 }
 
-/* =========================================================
-   SAVE / LOAD / RESET / HELP
-   ========================================================= */
 async function doSave(name) {
   if (!name) {
     name = await promptModal('Название сохранения', 'game-' + Date.now());
@@ -706,6 +890,7 @@ function doReset() {
   if (!confirm('Начать новую игру? Текущая история будет потеряна.')) return;
   messages = []; state = {...EMPTY_STATE};
   try { localStorage.removeItem(AVATAR_KEY); } catch(e){}
+  ttsStop();
   persist(); chatEl.innerHTML = ''; renderStatus(); showIntro();
 }
 
@@ -713,7 +898,8 @@ function doHelp() {
   addHtmlMsg('system', 'Команды:<br><code>/roll 1d20+3</code> — бросок<br>' +
     '<code>/sheet</code> — лист<br><code>/save имя</code> — сохранить<br>' +
     '<code>/load имя</code> — загрузить<br><code>/reset</code> — новая игра<br><br>' +
-    'Или тапайте по кнопкам быстрых действий над полем ввода.');
+    'Или тапайте по кнопкам быстрых действий над полем ввода.<br>' +
+    'Озвучка — в меню ☰ → «Озвучка».');
 }
 
 function renderAll() {
@@ -726,6 +912,9 @@ function renderAll() {
       addMsg('master', m.content);
     }
   });
+  // После перерисовки берём текст последнего ответа мастера для «Озвучить последний»
+  const lastMaster = [...messages].reverse().find(m => m.role === 'assistant');
+  if (lastMaster) tts.lastText = lastMaster.content;
 }
 
 function showIntro() {
@@ -735,9 +924,6 @@ function showIntro() {
     'Портрет персонажа появится автоматически, как только мастер узнает имя.');
 }
 
-/* =========================================================
-   WORLDS
-   ========================================================= */
 function renderWorlds() {
   const container = document.getElementById('worlds-section');
   if (!container) return;
@@ -752,6 +938,7 @@ function renderWorlds() {
       drawerBg.classList.remove('open');
       messages = []; state = {...EMPTY_STATE};
       try { localStorage.removeItem(AVATAR_KEY); } catch(e){}
+      ttsStop();
       chatEl.innerHTML = '';
       renderStatus();
       addMsg('system', `Выбран мир: ${world.name}\n${world.desc}`);
@@ -762,9 +949,6 @@ function renderWorlds() {
   });
 }
 
-/* =========================================================
-   MODALS
-   ========================================================= */
 function promptModal(title, ph) {
   return new Promise(res => {
     modalContent.innerHTML = `<h3>${title}</h3>
@@ -801,9 +985,6 @@ function listModal(title, items) {
   });
 }
 
-/* =========================================================
-   INPUT / LISTENERS
-   ========================================================= */
 function autosize() {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
@@ -854,15 +1035,11 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
   };
 });
 
-/* =========================================================
-   INIT
-   ========================================================= */
 function init() {
   const saved = restore();
   if (saved && saved.messages.length) {
     messages = saved.messages;
     state = saved.state || {...EMPTY_STATE};
-    // На случай старых сохранений без новых полей
     if (!Array.isArray(state.relationships)) state.relationships = [];
     if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
     renderAll(); renderStatus();
@@ -873,6 +1050,7 @@ function init() {
     showIntro();
   }
   renderWorlds();
+  ttsLoad();
   autosize();
 }
 init();
