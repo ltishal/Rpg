@@ -16,6 +16,7 @@
     --accent-gold: #c9a227;
     --accent-crimson: #a63a3a;
     --accent-sapphire: #3a6ea6;
+    --accent-green: #7fbf7f;
     --font-serif: Georgia, 'Times New Roman', serif;
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -140,10 +141,7 @@
     padding: 0;
   }
   .speak-btn:hover { background: var(--bg-card); color: var(--accent-gold); }
-  .speak-btn.playing {
-    color: var(--accent-gold); border-color: var(--accent-gold);
-    animation: ttsPulse 1.2s infinite;
-  }
+  .speak-btn.playing { color: var(--accent-gold); border-color: var(--accent-gold); animation: ttsPulse 1.2s infinite; }
   @keyframes ttsPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   .tts-active { color: var(--accent-gold); border-color: var(--accent-gold); }
   #input-bar {
@@ -188,7 +186,7 @@
   #drawer .btn { width: 100%; text-align: left; padding: 12px 16px; font-size: 15px; }
   #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
   #modal.open { display: flex; }
-  .modal-content { background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 24px; width: 100%; max-width: 440px; max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .modal-content { background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 24px; width: 100%; max-width: 460px; max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
   .modal-content h3 { margin: 0 0 4px; font-size: 18px; font-family: var(--font-serif); color: var(--accent-gold); }
   .modal-content input { width: 100%; background: var(--bg-deep); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 8px; padding: 12px 14px; font-size: 16px; font-family: var(--font-sans); outline: none; }
   .save-item { padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; cursor: pointer; font-size: 14px; }
@@ -200,6 +198,8 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .tag { background: var(--bg-card); padding: 5px 12px; border-radius: 6px; font-size: 13px; color: var(--text-secondary); border: 1px solid var(--border-subtle); }
   .tag.empty { color: #5a5a4e; font-style: italic; }
+  .tag.skill { border-color: #4a3a6e; color: #b48cff; }
+  .tag.ability { border-color: #5a3a2a; color: #e8c8a8; }
   .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .stat-box { background: var(--bg-card); padding: 10px; border-radius: 8px; text-align: center; border: 1px solid var(--border-subtle); }
   .stat-box .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -213,6 +213,23 @@
   .dc-box.up .dc-val { color: #d45a5a; }
   .dc-box.down .dc-val { color: #7fbf7f; }
   .dc-box .dc-val.neutral { color: var(--text-secondary); }
+
+  /* Умения */
+  .ability-card {
+    background: var(--bg-card); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .ability-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .ability-name { font-weight: 600; color: var(--accent-gold); font-size: 14px; font-family: var(--font-serif); }
+  .ability-uses { font-size: 12px; font-family: monospace; color: var(--text-secondary); }
+  .ability-uses.empty { color: #d45a5a; }
+  .ability-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+  .ability-recharge { font-size: 10px; color: #5a5a4e; margin-top: 3px; font-style: italic; }
+  .ability-card.passive { border-color: #4a3a6e; }
+  .ability-card.passive .ability-name { color: #b48cff; }
 </style>
 </head>
 <body>
@@ -232,7 +249,7 @@
   <button class="quick-btn" data-quick="Я устраиваю короткий привал, чтобы восстановить силы.">🛌 Отдых</button>
   <button class="quick-btn" data-quick="Я проверяю свои карманы и вещи.">🎒 Инвентарь</button>
   <button class="quick-btn" data-quick="/roll 1d20">🎲 Кубик</button>
-  <button class="quick-btn" data-quick="/sheet">📜 Лист</button>
+  <button class="quick-btn" data-quick="/skills">🎯 Умения</button>
 </div>
 
 <div id="chat"></div>
@@ -249,6 +266,7 @@
     <button class="btn" data-action="dice">🎲 Бросок 1d20</button>
     <button class="btn" data-action="dice-custom">🎲 Свой бросок...</button>
     <button class="btn" data-action="sheet">📜 Полный лист</button>
+    <button class="btn" data-action="skills">🎯 Умения и навыки</button>
   </div>
   <h2>Готовые миры</h2>
   <div class="drawer-section" id="worlds-section"></div>
@@ -282,15 +300,16 @@ const modalEl = document.getElementById('modal');
 const modalContent = document.getElementById('modal-content');
 const statusEl = document.getElementById('status');
 
-const LS_KEY = 'rpg_session_v5';
+const LS_KEY = 'rpg_session_v6';
 const AVATAR_KEY = 'rpg_avatar_v1';
 const TTS_KEY = 'rpg_tts_v1';
 
 const EMPTY_STATE = {
-  name:"Пустой", race:"", class:"",
+  name:"Пустой", race:"", class:"", background:"",
   level:1, xp:0, xp_next:100,
   hp:10, max_hp:10, gold:0,
   stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},
+  proficiencies:[], skills:[], abilities:[],
   inventory:[], quests:[], conditions:[],
   relationships:[], faction_clocks:[],
   dc_modifier:0, dc_modifier_reasons:[]
@@ -298,11 +317,11 @@ const EMPTY_STATE = {
 
 const READY_WORLDS = [
   { id: 'forgotten_realms', name: 'Забытые Королевства', desc: 'Классическое D&D. Шахта Фандальвера, гоблины, драконы.', prompt: 'Мир: Забытые Королевства. Начни приключение "Шахта Фандальвера". Я и мои спутники сопровождаем караван дворфа Гундрена Роксвика в город Фандалин. Начинается всё с засады гоблинов на дороге. Опиши сцену, дай мне возможность действовать.' },
-  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Вокруг лес, холод и ощущение, что за нами наблюдают. Начни с прибытия в Баровию. Атмосфера — готический хоррор, постоянное напряжение, страх, вампиры и нежить.' },
-  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать серию загадочных краж, связанных с запретными магическими технологиями. Начни с прибытия на место преступления. Атмосфера — нуар, городские приключения, интриги, механические существа.' },
-  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы получили заказ на перевозку таинственного груза через Астральное море. Начни с момента, когда мы обнаруживаем, что за нами следует неизвестный корабль. Атмосфера — космическая фэнтези-опера, пираты, необычные расы и планеты.' },
-  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Позади остался город-государство тирана-колдуна. Впереди — бескрайняя пустыня, где вода на вес золота. Начни с того, как я и мои спутники пытаемся найти убежище на ночь. Атмосфера — выживание, жестокость, суровые пустоши.' },
-  { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG, Система пришла на Землю. Я — обычный человек, который только что получил интерфейс с уровнем и характеристиками. Вокруг начали появляться монстры. Начни с момента, когда я вижу первую Систему и первого монстра. Атмосфера — прокачка, выживание, современный мир с игровыми механиками.' }
+  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Вокруг лес, холод и ощущение, что за нами наблюдают. Начни с прибытия в Баровию.' },
+  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать серию загадочных краж, связанных с запретными магическими технологиями. Начни с прибытия на место преступления.' },
+  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы получили заказ на перевозку таинственного груза через Астральное море. Начни с момента, когда мы обнаруживаем, что за нами следует неизвестный корабль.' },
+  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Позади остался город-государство тирана-колдуна. Впереди — бескрайняя пустыня, где вода на вес золота. Начни с того, как я и мои спутники пытаемся найти убежище на ночь.' },
+  { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG, Система пришла на Землю. Я — обычный человек, который только что получил интерфейс с уровнем и характеристиками. Вокруг начали появляться монстры. Начни с момента, когда я вижу первую Систему и первого монстра.' }
 ];
 
 function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify({messages, state})); } catch(e){} }
@@ -474,7 +493,7 @@ function ttsClean(text) {
   return text
     .replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '')
     .replace(/\*+.*?\*+/g, '')
-    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒]/g, '')
+    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
     .replace(/\s+/g, ' ').trim();
@@ -577,7 +596,7 @@ document.getElementById('tts-voice-btn').onclick = () => ttsPickVoice();
 document.getElementById('tts-stop-btn').onclick = () => ttsStop();
 
 /* =========================================================
-   STATUS — с расой/классом и DC-модификатором
+   STATUS
    ========================================================= */
 function renderStatus() {
   if (!state) { statusEl.innerHTML = ''; return; }
@@ -748,6 +767,7 @@ function handleCommand(cmd, arg) {
   switch(cmd) {
     case '/roll': return doRoll(arg || '1d20');
     case '/sheet': return doSheet();
+    case '/skills': return doSkills();
     case '/save': return doSave(arg);
     case '/load': return doLoad(arg);
     case '/reset': return doReset();
@@ -778,7 +798,7 @@ async function doRoll(expr) {
 }
 
 /* =========================================================
-   SHEET — с расой, классом, DC
+   SHEET — полный
    ========================================================= */
 async function doSheet() {
   if (!state) return;
@@ -848,6 +868,7 @@ async function doSheet() {
     ${avatar}
     <h3>📜 ${esc(state.name || 'Пустой')}</h3>
     ${state.race || state.class ? `<div class="kv"><span class="k">Раса · Класс</span><span class="v">${esc(state.race || '—')} · ${esc(state.class || '—')}</span></div>` : ''}
+    ${state.background ? `<div class="kv"><span class="k">Предыстория</span><span class="v">${esc(state.background)}</span></div>` : ''}
     <div class="kv"><span class="k">Уровень</span><span class="v">${state.level}</span></div>
     <div class="kv"><span class="k">Опыт</span><span class="v">${state.xp} / ${state.xp_next}</span></div>
     <div class="kv"><span class="k">Здоровье</span><span class="v">${state.hp} / ${state.max_hp}</span></div>
@@ -862,10 +883,77 @@ async function doSheet() {
     <h3 style="margin-top:12px;font-size:15px">Состояния</h3><div class="tags">${cd}</div>
     <h3 style="margin-top:12px;font-size:15px">Отношения</h3><div class="tags">${rel}</div>
     <h3 style="margin-top:12px;font-size:15px">Силы в тени</h3><div>${clocks}</div>
-    <button class="btn primary" style="margin-top:12px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
+    <button class="btn" style="margin-top:8px" onclick="document.getElementById('modal').classList.remove('open');doSkills();">🎯 Умения и навыки</button>
+    <button class="btn primary" style="margin-top:4px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
   modalEl.classList.add('open');
 }
 
+/* =========================================================
+   SKILLS — отдельная модалка: владения, навыки, умения
+   ========================================================= */
+async function doSkills() {
+  if (!state) return;
+
+  const prof = (state.proficiencies || []).length
+    ? state.proficiencies.map(p => `<span class="tag">${esc(p)}</span>`).join('')
+    : '<span class="tag empty">нет владений</span>';
+
+  const skills = (state.skills || []).length
+    ? state.skills.map(sk => {
+        const bonus = sk.bonus >= 0 ? '+' + sk.bonus : '' + sk.bonus;
+        return `<span class="tag skill" title="${esc(sk.source || '')}">${esc(sk.name)} ${bonus}</span>`;
+      }).join('')
+    : '<span class="tag empty">нет навыков</span>';
+
+  const abilities = (state.abilities || []).length
+    ? state.abilities.map(a => {
+        const isPassive = a.recharge === 'passive' || !a.uses_max;
+        const usesText = isPassive
+          ? '∞'
+          : `${a.uses_left ?? a.uses_max}/${a.uses_max}`;
+        const isEmpty = !isPassive && (a.uses_left || 0) === 0;
+        const rechargeLabel = {
+          'passive': 'пассивное',
+          'short_rest': 'короткий отдых',
+          'long_rest': 'долгий отдых',
+          'day': 'раз в день'
+        }[a.recharge] || '';
+        return `<div class="ability-card ${isPassive ? 'passive' : ''}">
+          <div class="ability-header">
+            <span class="ability-name">${esc(a.name)}</span>
+            <span class="ability-uses ${isEmpty ? 'empty' : ''}">${usesText}</span>
+          </div>
+          <div class="ability-desc">${esc(a.description || '')}</div>
+          ${rechargeLabel ? `<div class="ability-recharge">⟳ ${esc(rechargeLabel)}</div>` : ''}
+        </div>`;
+      }).join('')
+    : '<div class="tag empty">нет умений</div>';
+
+  modalContent.innerHTML = `
+    <h3>🎯 ${esc(state.name || 'Пустой')} — Умения</h3>
+    ${state.race || state.class || state.background ? `
+      <div style="font-size:13px;color:var(--text-secondary)">
+        ${[state.race, state.class, state.background].filter(Boolean).map(esc).join(' · ')}
+      </div>
+    ` : ''}
+
+    <h3 style="margin-top:14px;font-size:15px">Активные умения</h3>
+    <div>${abilities}</div>
+
+    <h3 style="margin-top:14px;font-size:15px">Пассивные навыки</h3>
+    <div class="tags">${skills}</div>
+
+    <h3 style="margin-top:14px;font-size:15px">Владения</h3>
+    <div class="tags">${prof}</div>
+
+    <button class="btn" style="margin-top:10px" onclick="document.getElementById('modal').classList.remove('open');doSheet();">📜 Полный лист</button>
+    <button class="btn primary" style="margin-top:4px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
+  modalEl.classList.add('open');
+}
+
+/* =========================================================
+   SAVE / LOAD / RESET / HELP
+   ========================================================= */
 async function doSave(name) {
   if (!name) {
     name = await promptModal('Название сохранения', 'game-' + Date.now());
@@ -911,10 +999,10 @@ function doReset() {
 
 function doHelp() {
   addHtmlMsg('system', 'Команды:<br><code>/roll 1d20+3</code> — бросок<br>' +
-    '<code>/sheet</code> — лист<br><code>/save имя</code> — сохранить<br>' +
-    '<code>/load имя</code> — загрузить<br><code>/reset</code> — новая игра<br><br>' +
-    'Или тапайте по кнопкам быстрых действий над полем ввода.<br>' +
-    'Озвучка — в меню ☰ → «Озвучка».');
+    '<code>/sheet</code> — полный лист<br><code>/skills</code> — умения и навыки<br>' +
+    '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
+    '<code>/reset</code> — новая игра<br><br>' +
+    'Или тапайте по кнопкам быстрых действий над полем ввода.');
 }
 
 function renderAll() {
@@ -933,8 +1021,8 @@ function renderAll() {
 
 function showIntro() {
   addMsg('system', 'Опишите персонажа, мир, тон и стартовую ситуацию.\n' +
-    'Например: «Я — эльф-плут Кейр, тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
-    'Мастер сам выставит характеристики по расе и классу.\n' +
+    'Например: «Я — эльф-плут Кейр, предыстория — Преступник. Тёмное фэнтези, город на болоте.»\n\n' +
+    'Мастер сам выставит характеристики, навыки и умения.\n' +
     'Или выберите готовый мир в меню ☰ → «Готовые миры».');
 }
 
@@ -955,8 +1043,8 @@ function renderWorlds() {
       ttsStop();
       chatEl.innerHTML = '';
       renderStatus();
-      addMsg('system', `Выбран мир: ${world.name}\n${world.desc}\n\nОпишите персонажа: раса, класс, имя.`);
-      messages.push({role: 'user', content: world.prompt + ' Если я не описал персонажа — сначала предложи 2–3 варианта расы и класса на выбор.'});
+      addMsg('system', `Выбран мир: ${world.name}\n${world.desc}\n\nОпишите персонажа: раса, класс, имя, предыстория.`);
+      messages.push({role: 'user', content: world.prompt + ' Если я не описал персонажа — сначала предложи 2–3 варианта расы, класса и предыстории на выбор.'});
       persist();
       callAI(messages);
     };
@@ -1042,6 +1130,7 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
     if (a === 'dice') doRoll('1d20');
     else if (a === 'dice-custom') promptModal('Бросок', '1d20+3').then(v => { if (v) doRoll(v); });
     else if (a === 'sheet') doSheet();
+    else if (a === 'skills') doSkills();
     else if (a === 'save') doSave();
     else if (a === 'load') doLoad();
     else if (a === 'reset') doReset();
@@ -1058,9 +1147,13 @@ function init() {
     if (!Array.isArray(state.relationships)) state.relationships = [];
     if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
     if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
+    if (!Array.isArray(state.proficiencies)) state.proficiencies = [];
+    if (!Array.isArray(state.skills)) state.skills = [];
+    if (!Array.isArray(state.abilities)) state.abilities = [];
     if (typeof state.dc_modifier !== 'number') state.dc_modifier = 0;
     if (typeof state.race !== 'string') state.race = '';
     if (typeof state.class !== 'string') state.class = '';
+    if (typeof state.background !== 'string') state.background = '';
     renderAll(); renderStatus();
     addMsg('system', '↩ История восстановлена. Продолжайте.');
   } else {
