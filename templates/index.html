@@ -226,10 +226,7 @@
     background: var(--bg-card); border: 1px solid var(--border-subtle);
     border-radius: 8px; padding: 10px 12px; margin-top: 8px;
   }
-  .situation-box .sit-row {
-    display: flex; justify-content: space-between;
-    padding: 4px 0; font-size: 13px;
-  }
+  .situation-box .sit-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
   .situation-box .sit-row .lbl { color: var(--text-secondary); }
   .situation-box .sit-row .val { color: var(--text-primary); font-weight: 500; }
   .situation-box .sit-row .val.warn { color: #d45a5a; }
@@ -305,7 +302,7 @@ const modalEl = document.getElementById('modal');
 const modalContent = document.getElementById('modal-content');
 const statusEl = document.getElementById('status');
 
-const LS_KEY = 'rpg_session_v7';
+const LS_KEY = 'rpg_session_v8';
 const AVATAR_KEY = 'rpg_avatar_v1';
 const TTS_KEY = 'rpg_tts_v1';
 
@@ -319,15 +316,16 @@ const EMPTY_STATE = {
   relationships:[], faction_clocks:[],
   dc_modifier:0, dc_modifier_reasons:[],
   position:"стоит", cover:"нет",
-  weapon_in_hand:"", restrained:false
+  weapon_in_hand:"", restrained:false,
+  level_history:[]
 };
 
 const READY_WORLDS = [
   { id: 'forgotten_realms', name: 'Забытые Королевства', desc: 'Классическое D&D. Шахта Фандальвера, гоблины, драконы.', prompt: 'Мир: Забытые Королевства. Начни приключение "Шахта Фандальвера". Я и мои спутники сопровождаем караван дворфа Гундрена Роксвика в город Фандалин. Начинается всё с засады гоблинов на дороге. Опиши сцену, дай мне возможность действовать.' },
-  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Начни с прибытия в Баровию.' },
-  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать кражу запретных магических технологий. Начни с прибытия на место преступления.' },
-  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы перевозим таинственный груз через Астральное море. Начни с обнаружения неизвестного корабля позади.' },
-  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Впереди — бескрайняя пустыня. Начни с поиска убежища на ночь.' },
+  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Начни с прибытия в Баровию. Атмосфера — готический хоррор, постоянное напряжение, страх, вампиры и нежить.' },
+  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать серию загадочных краж, связанных с запретными магическими технологиями. Начни с прибытия на место преступления.' },
+  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы получили заказ на перевозку таинственного груза через Астральное море. Начни с момента, когда мы обнаруживаем, что за нами следует неизвестный корабль.' },
+  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Позади остался город-государство тирана-колдуна. Впереди — бескрайняя пустыня, где вода на вес золота. Начни с того, как я и мои спутники пытаемся найти убежище на ночь.' },
   { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG. Система пришла на Землю. Я — обычный человек с интерфейсом уровня и характеристик. Вокруг появляются монстры. Начни с первой Системы и первого монстра.' }
 ];
 
@@ -346,33 +344,27 @@ function esc(s) {
 }
 
 /* =========================================================
-   POSITION / COVER / SITUATION HELPERS
+   POSITION / COVER
    ========================================================= */
 const POSITION_LABELS = {
   'стоит': { icon: '🧍', label: 'Стоит', mod: 0 },
-  'сидит': { icon: '🪑', label: 'Сидит', mod: 1 },
+  'сидит': { icon: '🪑', label: 'Сидит', mod: 0 },
   'на коленях': { icon: '🧎', label: 'На коленях', mod: 1 },
   'лежит': { icon: '🛌', label: 'Лежит', mod: 5 },
-  'верхом': { icon: '🐎', label: 'Верхом', mod: 1 },
+  'верхом': { icon: '🐎', label: 'Верхом', mod: 0 },
   'плавает': { icon: '🏊', label: 'Плавает', mod: 3 },
   'висит': { icon: '🪜', label: 'Висит', mod: 3 },
   'схвачен': { icon: '🤝', label: 'Схвачен', mod: 5 },
   'обездвижен': { icon: '⛓', label: 'Обездвижен', mod: 99 }
 };
-
 const COVER_LABELS = {
   'нет': { icon: '', label: 'Без укрытия', mod: 0 },
   'половинное': { icon: '🛡½', label: 'Укрытие ½', mod: 2 },
   'три_четверти': { icon: '🛡¾', label: 'Укрытие ¾', mod: 5 },
   'полное': { icon: '🛡✓', label: 'Полное укрытие', mod: 99 }
 };
-
-function getPositionInfo(pos) {
-  return POSITION_LABELS[pos] || { icon: '❔', label: pos || '—', mod: 0 };
-}
-function getCoverInfo(cov) {
-  return COVER_LABELS[cov] || { icon: '', label: cov || '—', mod: 0 };
-}
+function getPositionInfo(pos) { return POSITION_LABELS[pos] || { icon: '❔', label: pos || '—', mod: 0 }; }
+function getCoverInfo(cov) { return COVER_LABELS[cov] || { icon: '', label: cov || '—', mod: 0 }; }
 
 /* =========================================================
    AVATAR
@@ -398,7 +390,6 @@ function detectArchetype(st) {
   }
   return best[1];
 }
-
 function buildAvatarPrompt(st) {
   const archetype = detectArchetype(st);
   const conditions = (st.conditions || []).join(', ');
@@ -406,7 +397,6 @@ function buildAvatarPrompt(st) {
   const name = st.name || 'Adventurer';
   return `Fantasy RPG character portrait of ${name}, ${race}${archetype}, level ${st.level}, detailed digital painting, dramatic lighting, dark atmospheric background, painterly style, high quality, centered composition${conditions ? ', ' + conditions : ''}`;
 }
-
 function cachedAvatarFor(name) {
   try {
     const raw = localStorage.getItem(AVATAR_KEY);
@@ -416,11 +406,9 @@ function cachedAvatarFor(name) {
   } catch(e){}
   return null;
 }
-
 function saveAvatar(name, url) {
   try { localStorage.setItem(AVATAR_KEY, JSON.stringify({name, url})); } catch(e){}
 }
-
 function generateAvatar(force) {
   if (!state || !state.name || state.name === 'Пустой') return;
   const wrap = document.querySelector('.avatar-wrap');
@@ -452,7 +440,6 @@ function generateAvatar(force) {
   };
   img.src = url;
 }
-
 function maybeGenerateAvatar() {
   if (!state || !state.name || state.name === 'Пустой') return;
   const cached = cachedAvatarFor(state.name);
@@ -464,7 +451,6 @@ function maybeGenerateAvatar() {
     generateAvatar(false);
   }
 }
-
 function openAvatarModal() {
   if (!state || !state.name || state.name === 'Пустой') {
     addMsg('system', 'Имя персонажа ещё не определено. Сыграйте пару ходов.');
@@ -493,7 +479,6 @@ const tts = {
   enabled: false, voice: null, rate: 1.0, speaking: false,
   lastText: '', available: ('speechSynthesis' in window)
 };
-
 function ttsLoad() {
   if (!tts.available) return;
   const pickVoice = () => {
@@ -517,24 +502,21 @@ function ttsLoad() {
   } catch(e){}
   ttsUpdateUI();
 }
-
 function ttsSave() {
   try {
     localStorage.setItem(TTS_KEY, JSON.stringify({enabled: tts.enabled, rate: tts.rate}));
     if (tts.voice) localStorage.setItem('rpg_tts_voice_name', tts.voice.name);
   } catch(e){}
 }
-
 function ttsClean(text) {
   return text
     .replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '')
     .replace(/\*+.*?\*+/g, '')
-    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡]/g, '')
+    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡⭐📈✓✗●▶○🎁🏛👤]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
     .replace(/\s+/g, ' ').trim();
 }
-
 function ttsSpeak(text, btn) {
   if (!tts.available) { addMsg('system', 'Озвучка не поддерживается.'); return; }
   const clean = ttsClean(text);
@@ -550,13 +532,11 @@ function ttsSpeak(text, btn) {
   utt.onerror = () => { tts.speaking = false; if (btn) btn.classList.remove('playing'); };
   speechSynthesis.speak(utt);
 }
-
 function ttsStop() {
   if (tts.available) speechSynthesis.cancel();
   tts.speaking = false;
   document.querySelectorAll('.speak-btn.playing').forEach(b => b.classList.remove('playing'));
 }
-
 function ttsUpdateUI() {
   const btn = document.getElementById('tts-toggle-btn');
   if (btn) {
@@ -573,7 +553,6 @@ function ttsUpdateUI() {
     } else vb.textContent = '🎙 Голос: не выбран';
   }
 }
-
 function ttsPickVoice() {
   if (!tts.available) return;
   const voices = speechSynthesis.getVoices();
@@ -605,7 +584,6 @@ function ttsPickVoice() {
     document.getElementById('modal-cancel').onclick = () => close(null);
   });
 }
-
 document.getElementById('tts-toggle-btn').onclick = () => {
   tts.enabled = !tts.enabled;
   ttsSave(); ttsUpdateUI();
@@ -691,7 +669,6 @@ function renderStatus() {
    CHAT
    ========================================================= */
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
-
 function addMsg(role, text) {
   const d = document.createElement('div');
   d.className = 'msg ' + role;
@@ -718,7 +695,6 @@ function addMsg(role, text) {
   scrollBottom();
   return d;
 }
-
 function addHtmlMsg(role, html) {
   const d = document.createElement('div');
   d.className = 'msg ' + role; d.innerHTML = html;
@@ -775,7 +751,6 @@ async function callAI(msgs) {
   document.querySelectorAll('.quick-btn').forEach(b => b.disabled = false);
   inputEl.focus();
 }
-
 async function updateState() {
   if (!state) state = {...EMPTY_STATE};
   try {
@@ -791,7 +766,7 @@ async function updateState() {
 }
 
 /* =========================================================
-   SEND / COMMANDS
+   SEND
    ========================================================= */
 async function sendMessage(text) {
   if (busy) return;
@@ -809,7 +784,6 @@ async function sendMessage(text) {
   inputEl.value = ''; autosize();
   await callAI(messages);
 }
-
 function handleCommand(cmd, arg) {
   switch(cmd) {
     case '/roll': return doRoll(arg || '1d20');
@@ -822,7 +796,6 @@ function handleCommand(cmd, arg) {
     default: addMsg('system', `Неизвестная команда: ${cmd}. Введите /help.`);
   }
 }
-
 async function doRoll(expr) {
   if (busy) return;
   const animDiv = addHtmlMsg('dice',
@@ -845,47 +818,87 @@ async function doRoll(expr) {
 }
 
 /* =========================================================
-   SHEET — полный
+   SHEET
    ========================================================= */
 async function doSheet() {
   if (!state) return;
   const s = state.stats || {};
+
+  // Квесты: строки → объекты
+  const quests = (state.quests || []).map(q => {
+    if (typeof q === 'string') {
+      return { id: 'old-' + q, name: q, type: 'side', status: 'active',
+               chain: '', chain_order: 0, stages: [], current_stage: 0,
+               rewards: {}, giver: '', location: '' };
+    }
+    return q;
+  });
+
   const inv = (state.inventory || []).length
     ? state.inventory.map(i => `<span class="tag">${esc(i)}</span>`).join('')
     : '<span class="tag empty">пусто</span>';
-  const qs = (state.quests || []).length
-    ? state.quests.map(q => `<span class="tag">${esc(q)}</span>`).join('')
-    : '<span class="tag empty">нет активных</span>';
   const cd = (state.conditions || []).length
     ? state.conditions.map(c => `<span class="tag">${esc(c)}</span>`).join('')
     : '<span class="tag empty">нет</span>';
 
-  const relColor = (att) => {
-    if (att === 'дружелюбен' || att === 'предан') return '#7fbf7f';
-    if (att === 'враждебен') return '#d45a5a';
-    if (att === 'насторожен') return '#d4a85a';
-    return 'var(--text-secondary)';
+  const typeInfo = {
+    main: { icon: '⭐', label: 'Главный', color: '#c9a227' },
+    side: { icon: '📜', label: 'Побочный', color: '#5a8ed4' },
+    personal: { icon: '👤', label: 'Личный', color: '#b48cff' },
+    faction: { icon: '🏛', label: 'Фракция', color: '#7fbf7f' }
   };
-  const rel = (state.relationships || []).length
-    ? state.relationships.map(r =>
-        `<span class="tag" style="border-color:${relColor(r.attitude)};color:${relColor(r.attitude)}">${esc(r.name)} — ${esc(r.attitude)}${r.note ? ' (' + esc(r.note) + ')' : ''}</span>`
-      ).join('')
-    : '<span class="tag empty">никого нет</span>';
 
-  const clocks = (state.faction_clocks || []).length
-    ? state.faction_clocks.map(c => {
-        const pct = Math.round((c.progress || 0) / (c.max || 6) * 100);
-        const danger = pct >= 80 ? '#d45a5a' : (pct >= 50 ? '#d4a85a' : '#7c5cff');
-        return `<div style="margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-            <span style="color:var(--text-primary)">${esc(c.name)}</span>
-            <span style="color:var(--text-secondary);font-family:monospace">${c.progress}/${c.max}</span>
-          </div>
-          <div class="bar-wrap" style="margin-bottom:4px"><div class="bar-fill" style="width:${pct}%;background:${danger}"></div></div>
-          <div style="font-size:12px;color:var(--text-secondary);font-style:italic">→ ${esc(c.goal)}</div>
-        </div>`;
-      }).join('')
-    : '<div class="tag empty">тихо</div>';
+  function renderQuest(q) {
+    const t = typeInfo[q.type] || typeInfo.side;
+    const isCompleted = q.status === 'completed';
+    const isFailed = q.status === 'failed';
+    const statusIcon = isCompleted ? '✓' : (isFailed ? '✗' : '●');
+    const statusColor = isCompleted ? '#5a5a4e' : (isFailed ? '#d45a5a' : t.color);
+    const stages = (q.stages || []).map((st, i) => {
+      const mark = st.done ? '✓' : (i === (q.current_stage || 0) ? '▶' : '○');
+      const color = st.done ? '#5a5a4e' : (i === (q.current_stage || 0) ? 'var(--text-primary)' : 'var(--text-secondary)');
+      const strike = st.done ? 'text-decoration:line-through;' : '';
+      return `<div style="font-size:12px;color:${color};${strike}margin:2px 0">${mark} ${esc(st.text || '')}</div>`;
+    }).join('');
+    const rewards = q.rewards && Object.keys(q.rewards).length
+      ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+           🎁 ${q.rewards.xp ? `+${q.rewards.xp} XP` : ''}
+           ${q.rewards.gold ? ` · +${q.rewards.gold}💰` : ''}
+           ${q.rewards.items && q.rewards.items.length ? ' · ' + q.rewards.items.map(esc).join(', ') : ''}
+         </div>`
+      : '';
+    const chainBadge = q.chain
+      ? `<span style="font-size:10px;color:#8a8a9a;background:var(--bg-deep);padding:1px 6px;border-radius:4px;margin-left:4px">цепочка ${esc(q.chain)} #${q.chain_order || '?'}</span>`
+      : '';
+    return `<div class="ability-card" style="border-color:${statusColor};${isCompleted ? 'opacity:0.55;' : ''}">
+      <div class="ability-header">
+        <span class="ability-name" style="color:${statusColor}">${statusIcon} ${t.icon} ${esc(q.name || '—')}</span>
+      </div>
+      <div style="font-size:11px;color:${statusColor};margin-bottom:4px">${t.label}${chainBadge}${q.giver ? ' · от ' + esc(q.giver) : ''}${q.location ? ' · ' + esc(q.location) : ''}</div>
+      <div>${stages || '<div style="font-size:12px;color:var(--text-secondary);font-style:italic">— нет этапов —</div>'}</div>
+      ${rewards}
+    </div>`;
+  }
+
+  const activeQuests = quests.filter(q => q.status === 'active');
+  const completedQuests = quests.filter(q => q.status === 'completed' || q.status === 'failed');
+  const questsBlock = activeQuests.length
+    ? activeQuests.map(renderQuest).join('')
+    : '<div class="tag empty">нет активных квестов</div>';
+  const completedBlock = completedQuests.length
+    ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-secondary);font-size:12px">Выполненные (${completedQuests.length})</summary><div style="margin-top:6px">${completedQuests.map(renderQuest).join('')}</div></details>`
+    : '';
+
+  const lvlHist = (state.level_history || []).length
+    ? state.level_history.map(h =>
+        `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0;border-bottom:1px solid var(--border-subtle)">
+          <b style="color:var(--text-primary)">Ур. ${h.level}</b>
+          · ${esc(h.hp || '')} HP
+          ${h.stats ? ' · ' + esc(h.stats) : ''}
+          ${h.abilities ? ' · ' + esc(h.abilities) : ''}
+        </div>`
+      ).join('')
+    : '<div class="tag empty">первый уровень — история пуста</div>';
 
   const dc = state.dc_modifier || 0;
   const dcBoxCls = dc > 0 ? 'up' : (dc < 0 ? 'down' : '');
@@ -904,16 +917,13 @@ async function doSheet() {
 
   const posInfo = getPositionInfo(state.position);
   const covInfo = getCoverInfo(state.cover);
-  const posWarn = (posInfo.mod >= 3) ? 'warn' : (posInfo.mod === 0 ? '' : 'warn');
   const situationBox = `
     <div class="situation-box">
       <div style="color:var(--text-secondary);font-size:12px;margin-bottom:6px">📍 Положение и обстановка</div>
-      <div class="sit-row"><span class="lbl">Позиция</span><span class="val ${posWarn}">${posInfo.icon} ${esc(posInfo.label)}</span></div>
-      ${posInfo.mod !== 0 ? `<div class="sit-row"><span class="lbl">Штраф к физ.</span><span class="val warn">+${posInfo.mod}</span></div>` : ''}
+      <div class="sit-row"><span class="lbl">Позиция</span><span class="val ${posInfo.mod !== 0 ? 'warn' : ''}">${posInfo.icon} ${esc(posInfo.label)}</span></div>
       <div class="sit-row"><span class="lbl">Укрытие</span><span class="val">${covInfo.icon || '—'} ${esc(covInfo.label)}</span></div>
-      ${covInfo.mod !== 0 ? `<div class="sit-row"><span class="lbl">Защита</span><span class="val good">+${covInfo.mod} к DC попасть</span></div>` : ''}
       <div class="sit-row"><span class="lbl">В руках</span><span class="val">${esc(state.weapon_in_hand || '—')}</span></div>
-      ${state.restrained ? `<div class="sit-row"><span class="lbl">Связан</span><span class="val warn">⛓ Да — физ. действия проваливаются</span></div>` : ''}
+      ${state.restrained ? `<div class="sit-row"><span class="lbl">Связан</span><span class="val warn">⛓ Да</span></div>` : ''}
     </div>`;
 
   const statMod = (val) => {
@@ -940,11 +950,12 @@ async function doSheet() {
     ).join('')}</div>
     ${situationBox}
     ${dcBox}
+    <h3 style="margin-top:12px;font-size:15px">🎯 Квесты</h3>
+    <div>${questsBlock}${completedBlock}</div>
+    <h3 style="margin-top:12px;font-size:15px">📈 Прокачка</h3>
+    <div>${lvlHist}</div>
     <h3 style="margin-top:12px;font-size:15px">Инвентарь</h3><div class="tags">${inv}</div>
-    <h3 style="margin-top:12px;font-size:15px">Квесты</h3><div class="tags">${qs}</div>
     <h3 style="margin-top:12px;font-size:15px">Состояния</h3><div class="tags">${cd}</div>
-    <h3 style="margin-top:12px;font-size:15px">Отношения</h3><div class="tags">${rel}</div>
-    <h3 style="margin-top:12px;font-size:15px">Силы в тени</h3><div>${clocks}</div>
     <button class="btn" style="margin-top:8px" onclick="document.getElementById('modal').classList.remove('open');doSkills();">🎯 Умения и навыки</button>
     <button class="btn primary" style="margin-top:4px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
   modalEl.classList.add('open');
@@ -955,18 +966,15 @@ async function doSheet() {
    ========================================================= */
 async function doSkills() {
   if (!state) return;
-
   const prof = (state.proficiencies || []).length
     ? state.proficiencies.map(p => `<span class="tag">${esc(p)}</span>`).join('')
     : '<span class="tag empty">нет владений</span>';
-
   const skills = (state.skills || []).length
     ? state.skills.map(sk => {
         const bonus = sk.bonus >= 0 ? '+' + sk.bonus : '' + sk.bonus;
         return `<span class="tag skill" title="${esc(sk.source || '')}">${esc(sk.name)} ${bonus}</span>`;
       }).join('')
     : '<span class="tag empty">нет навыков</span>';
-
   const abilities = (state.abilities || []).length
     ? state.abilities.map(a => {
         const isPassive = a.recharge === 'passive' || !a.uses_max;
@@ -988,7 +996,6 @@ async function doSkills() {
         </div>`;
       }).join('')
     : '<div class="tag empty">нет умений</div>';
-
   modalContent.innerHTML = `
     <h3>🎯 ${esc(state.name || 'Пустой')} — Умения</h3>
     ${state.race || state.class || state.background ? `
@@ -996,16 +1003,12 @@ async function doSkills() {
         ${[state.race, state.class, state.background].filter(Boolean).map(esc).join(' · ')}
       </div>
     ` : ''}
-
     <h3 style="margin-top:14px;font-size:15px">Активные умения</h3>
     <div>${abilities}</div>
-
     <h3 style="margin-top:14px;font-size:15px">Пассивные навыки</h3>
     <div class="tags">${skills}</div>
-
     <h3 style="margin-top:14px;font-size:15px">Владения</h3>
     <div class="tags">${prof}</div>
-
     <button class="btn" style="margin-top:10px" onclick="document.getElementById('modal').classList.remove('open');doSheet();">📜 Полный лист</button>
     <button class="btn primary" style="margin-top:4px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
   modalEl.classList.add('open');
@@ -1028,7 +1031,6 @@ async function doSave(name) {
     addMsg('system', `💾 Сохранено: «${d.name}»`);
   } catch(e) { addMsg('system', 'Ошибка сохранения: ' + e.message); }
 }
-
 async function doLoad(name) {
   let saves;
   try { saves = await (await fetch('/api/saves')).json(); }
@@ -1048,7 +1050,6 @@ async function doLoad(name) {
     addMsg('system', `📂 Загружено: «${name}»`);
   } catch(e) { addMsg('system', 'Ошибка: ' + e.message); }
 }
-
 function doReset() {
   if (!confirm('Начать новую игру? Текущая история будет потеряна.')) return;
   messages = []; state = {...EMPTY_STATE};
@@ -1056,15 +1057,13 @@ function doReset() {
   ttsStop();
   persist(); chatEl.innerHTML = ''; renderStatus(); showIntro();
 }
-
 function doHelp() {
   addHtmlMsg('system', 'Команды:<br><code>/roll 1d20+3</code> — бросок<br>' +
     '<code>/sheet</code> — полный лист<br><code>/skills</code> — умения и навыки<br>' +
     '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
     '<code>/reset</code> — новая игра<br><br>' +
-    'Мастер сам учитывает положение (лежит/сидит/схвачен), укрытие и оружие в руке при назначении DC.');
+    'Мастер учитывает положение, укрытие и оружие в руке при назначении DC.');
 }
-
 function renderAll() {
   chatEl.innerHTML = '';
   messages.forEach(m => {
@@ -1078,14 +1077,12 @@ function renderAll() {
   const lastMaster = [...messages].reverse().find(m => m.role === 'assistant');
   if (lastMaster) tts.lastText = lastMaster.content;
 }
-
 function showIntro() {
   addMsg('system', 'Опишите персонажа, мир, тон и стартовую ситуацию.\n' +
     'Например: «Я — эльф-плут Кейр, Преступник. Тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
-    'Мастер сам выставит характеристики, навыки, умения и учтёт положение тела.\n' +
+    'Мастер сам выставит характеристики, навыки, умения, будет учитывать положение тела.\n' +
     'Или выберите готовый мир в меню ☰ → «Готовые миры».');
 }
-
 function renderWorlds() {
   const container = document.getElementById('worlds-section');
   if (!container) return;
@@ -1110,7 +1107,6 @@ function renderWorlds() {
     };
   });
 }
-
 function promptModal(title, ph) {
   return new Promise(res => {
     modalContent.innerHTML = `<h3>${title}</h3>
@@ -1131,7 +1127,6 @@ function promptModal(title, ph) {
     };
   });
 }
-
 function listModal(title, items) {
   return new Promise(res => {
     modalContent.innerHTML = `<h3>${title}</h3>
@@ -1146,7 +1141,6 @@ function listModal(title, items) {
     document.getElementById('modal-cancel').onclick = () => close(null);
   });
 }
-
 function autosize() {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
@@ -1203,13 +1197,14 @@ function init() {
   if (saved && saved.messages.length) {
     messages = saved.messages;
     state = saved.state || {...EMPTY_STATE};
-    // Совместимость со старыми сохранениями
+    // Совместимость
     if (!Array.isArray(state.relationships)) state.relationships = [];
     if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
     if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
     if (!Array.isArray(state.proficiencies)) state.proficiencies = [];
     if (!Array.isArray(state.skills)) state.skills = [];
     if (!Array.isArray(state.abilities)) state.abilities = [];
+    if (!Array.isArray(state.level_history)) state.level_history = [];
     if (typeof state.dc_modifier !== 'number') state.dc_modifier = 0;
     if (typeof state.race !== 'string') state.race = '';
     if (typeof state.class !== 'string') state.class = '';
@@ -1218,6 +1213,19 @@ function init() {
     if (typeof state.cover !== 'string') state.cover = 'нет';
     if (typeof state.weapon_in_hand !== 'string') state.weapon_in_hand = '';
     if (typeof state.restrained !== 'boolean') state.restrained = false;
+    // Квесты: строки → объекты
+    if (Array.isArray(state.quests)) {
+      state.quests = state.quests.map(q => {
+        if (typeof q === 'string') {
+          return { id: 'legacy-' + Math.random().toString(36).slice(2,8), name: q,
+                   type: 'side', status: 'active', chain: '', chain_order: 0,
+                   stages: [], current_stage: 0, rewards: {}, giver: '', location: '' };
+        }
+        return q;
+      });
+    } else {
+      state.quests = [];
+    }
     renderAll(); renderStatus();
     addMsg('system', '↩ История восстановлена. Продолжайте.');
   } else {
