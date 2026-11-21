@@ -26,7 +26,6 @@
     display: flex; flex-direction: column; height: 100dvh; font-size: 16px;
     background-image: radial-gradient(ellipse at 50% 0%, #2a2420 0%, var(--bg-deep) 70%);
   }
-
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
@@ -35,7 +34,6 @@
   }
   header h1 { font-size: 16px; margin: 0; font-weight: 600; font-family: var(--font-serif); letter-spacing: 0.5px; }
   header h1 span { color: var(--accent-gold); }
-
   #status {
     background: rgba(26, 22, 20, 0.9); backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border-subtle);
@@ -62,12 +60,15 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .status-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
   .status-name { font-weight: 700; color: var(--accent-gold); font-family: var(--font-serif); font-size: 15px; }
+  .status-sub { font-size: 11px; color: var(--text-secondary); margin-top: -2px; }
   .status-chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .status-chip {
     background: var(--bg-card); padding: 2px 8px; border-radius: 6px;
     color: var(--text-secondary); font-size: 11px;
     border: 1px solid var(--border-subtle);
   }
+  .status-chip.dc-up { color: #d45a5a; border-color: #5a3a2a; background: #2a1f1a; }
+  .status-chip.dc-down { color: #7fbf7f; border-color: #2a4a2a; background: #1f2a1f; }
   .bar-wrap { flex: 1; height: 6px; background: var(--bg-deep); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-subtle); }
   .bar-fill { height: 100%; transition: width 0.4s ease; border-radius: 4px; }
   .bar-hp { background: linear-gradient(90deg, #6b2020, #a63a3a, #d45a5a); }
@@ -105,8 +106,7 @@
     align-self: flex-start; background: transparent;
     padding: 4px 0 4px 14px; font-family: var(--font-serif);
     font-size: 16px; color: #d8cec2; max-width: 100%;
-    border-left: 3px solid var(--accent-gold);
-    position: relative;
+    border-left: 3px solid var(--accent-gold); position: relative;
   }
   .msg.system {
     align-self: center; font-size: 13px; color: var(--text-secondary);
@@ -131,8 +131,6 @@
   }
   .typing-indicator::after { content: '▍'; animation: blink 1s infinite; color: var(--accent-gold); }
   @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-
-  /* === TTS === */
   .speak-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; border-radius: 6px;
@@ -148,7 +146,6 @@
   }
   @keyframes ttsPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   .tts-active { color: var(--accent-gold); border-color: var(--accent-gold); }
-
   #input-bar {
     display: flex; gap: 8px; padding: 12px 14px;
     padding-bottom: max(12px, env(safe-area-inset-bottom));
@@ -207,7 +204,15 @@
   .stat-box { background: var(--bg-card); padding: 10px; border-radius: 8px; text-align: center; border: 1px solid var(--border-subtle); }
   .stat-box .lbl { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
   .stat-box .val { font-size: 18px; font-weight: 700; color: var(--accent-gold); margin-top: 4px; font-family: var(--font-serif); }
+  .stat-box .mod { font-size: 11px; color: var(--text-secondary); margin-top: 2px; font-family: monospace; }
   .avatar-large { display: block; margin: 0 auto; width: 220px; height: 220px; border-radius: 50%; border: 3px solid var(--accent-gold); object-fit: cover; background: var(--bg-deep); }
+  .dc-box { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; margin-top: 8px; }
+  .dc-box.up { border-color: #5a3a2a; }
+  .dc-box.down { border-color: #2a4a2a; }
+  .dc-box .dc-val { font-size: 20px; font-weight: 700; font-family: var(--font-serif); }
+  .dc-box.up .dc-val { color: #d45a5a; }
+  .dc-box.down .dc-val { color: #7fbf7f; }
+  .dc-box .dc-val.neutral { color: var(--text-secondary); }
 </style>
 </head>
 <body>
@@ -277,16 +282,18 @@ const modalEl = document.getElementById('modal');
 const modalContent = document.getElementById('modal-content');
 const statusEl = document.getElementById('status');
 
-const LS_KEY = 'rpg_session_v4';
+const LS_KEY = 'rpg_session_v5';
 const AVATAR_KEY = 'rpg_avatar_v1';
 const TTS_KEY = 'rpg_tts_v1';
 
 const EMPTY_STATE = {
-  name:"Пустой", level:1, xp:0, xp_next:100,
+  name:"Пустой", race:"", class:"",
+  level:1, xp:0, xp_next:100,
   hp:10, max_hp:10, gold:0,
   stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},
   inventory:[], quests:[], conditions:[],
-  relationships:[], faction_clocks:[]
+  relationships:[], faction_clocks:[],
+  dc_modifier:0, dc_modifier_reasons:[]
 };
 
 const READY_WORLDS = [
@@ -317,15 +324,20 @@ function esc(s) {
    ========================================================= */
 function detectArchetype(st) {
   const s = st.stats || {};
-  const values = [
-    ['str', 'warrior knight fighter'],
-    ['dex', 'rogue assassin thief'],
-    ['int', 'wizard mage sorcerer'],
-    ['wis', 'cleric druid monk'],
-    ['cha', 'bard warlock paladin']
-  ];
-  let best = ['str', 'adventurer'];
-  let maxVal = -1;
+  const cls = (st.class || '').toLowerCase();
+  const clsMap = {
+    'воин': 'warrior knight fighter', 'варвар': 'barbarian berserker',
+    'паладин': 'paladin knight holy', 'плут': 'rogue assassin thief',
+    'следопыт': 'ranger archer hunter', 'монах': 'monk martial artist',
+    'маг': 'wizard mage sorcerer', 'жрец': 'cleric priest',
+    'друид': 'druid nature shaman', 'бард': 'bard musician',
+    'колдун': 'warlock dark mage', 'чародей': 'sorcerer magic'
+  };
+  for (const key in clsMap) {
+    if (cls.includes(key)) return clsMap[key];
+  }
+  const values = [['str','warrior knight'],['dex','rogue thief'],['int','wizard mage'],['wis','cleric druid'],['cha','bard warlock']];
+  let best = ['str', 'adventurer'], maxVal = -1;
   for (const [k, role] of values) {
     if ((s[k] || 10) > maxVal) { maxVal = s[k] || 10; best = [k, role]; }
   }
@@ -335,8 +347,9 @@ function detectArchetype(st) {
 function buildAvatarPrompt(st) {
   const archetype = detectArchetype(st);
   const conditions = (st.conditions || []).join(', ');
+  const race = st.race ? st.race + ' ' : '';
   const name = st.name || 'Adventurer';
-  return `Fantasy RPG character portrait of ${name}, ${archetype}, level ${st.level}, detailed digital painting, dramatic lighting, dark atmospheric background, painterly style, high quality, centered composition${conditions ? ', ' + conditions : ''}`;
+  return `Fantasy RPG character portrait of ${name}, ${race}${archetype}, level ${st.level}, detailed digital painting, dramatic lighting, dark atmospheric background, painterly style, high quality, centered composition${conditions ? ', ' + conditions : ''}`;
 }
 
 function cachedAvatarFor(name) {
@@ -422,12 +435,8 @@ function openAvatarModal() {
    TTS
    ========================================================= */
 const tts = {
-  enabled: false,
-  voice: null,
-  rate: 1.0,
-  speaking: false,
-  lastText: '',
-  available: ('speechSynthesis' in window)
+  enabled: false, voice: null, rate: 1.0, speaking: false,
+  lastText: '', available: ('speechSynthesis' in window)
 };
 
 function ttsLoad() {
@@ -446,7 +455,6 @@ function ttsLoad() {
   };
   pickVoice();
   speechSynthesis.onvoiceschanged = pickVoice;
-
   try {
     const saved = JSON.parse(localStorage.getItem(TTS_KEY) || '{}');
     if (typeof saved.enabled === 'boolean') tts.enabled = saved.enabled;
@@ -457,46 +465,34 @@ function ttsLoad() {
 
 function ttsSave() {
   try {
-    localStorage.setItem(TTS_KEY, JSON.stringify({
-      enabled: tts.enabled,
-      rate: tts.rate
-    }));
+    localStorage.setItem(TTS_KEY, JSON.stringify({enabled: tts.enabled, rate: tts.rate}));
     if (tts.voice) localStorage.setItem('rpg_tts_voice_name', tts.voice.name);
   } catch(e){}
 }
 
 function ttsClean(text) {
   return text
-    .replace(/\[\[.*?\]\]/g, '')
-    .replace(/\[.*?\]/g, '')
+    .replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '')
     .replace(/\*+.*?\*+/g, '')
     .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/\s+/g, ' ').trim();
 }
 
 function ttsSpeak(text, btn) {
-  if (!tts.available) {
-    addMsg('system', 'Озвучка не поддерживается этим браузером.');
-    return;
-  }
+  if (!tts.available) { addMsg('system', 'Озвучка не поддерживается.'); return; }
   const clean = ttsClean(text);
   if (!clean) return;
   if (tts.speaking) speechSynthesis.cancel();
-
   const utt = new SpeechSynthesisUtterance(clean);
   if (tts.voice) utt.voice = tts.voice;
   utt.lang = tts.voice ? tts.voice.lang : 'ru-RU';
-  utt.rate = tts.rate;
-  utt.pitch = 1.0;
-
+  utt.rate = tts.rate; utt.pitch = 1.0;
   if (btn) btn.classList.add('playing');
   utt.onstart = () => { tts.speaking = true; };
   utt.onend = () => { tts.speaking = false; if (btn) btn.classList.remove('playing'); };
   utt.onerror = () => { tts.speaking = false; if (btn) btn.classList.remove('playing'); };
-
   speechSynthesis.speak(utt);
 }
 
@@ -519,23 +515,16 @@ function ttsUpdateUI() {
     if (tts.voice) {
       const short = tts.voice.name.length > 22 ? tts.voice.name.substring(0, 22) + '…' : tts.voice.name;
       vb.textContent = `🎙 Голос: ${short}`;
-    } else {
-      vb.textContent = '🎙 Голос: не выбран';
-    }
+    } else vb.textContent = '🎙 Голос: не выбран';
   }
 }
 
 function ttsPickVoice() {
   if (!tts.available) return;
   const voices = speechSynthesis.getVoices();
-  if (!voices.length) {
-    addMsg('system', 'Голоса ещё загружаются. Попробуйте через пару секунд.');
-    return;
-  }
-  // Приоритет: русские голоса
+  if (!voices.length) { addMsg('system', 'Голоса ещё загружаются.'); return; }
   const ruVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('ru'));
   const list = (ruVoices.length ? ruVoices : voices).slice(0, 20);
-
   return new Promise(res => {
     modalContent.innerHTML = `<h3>🎙 Выбор голоса</h3>
       <div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto">
@@ -566,7 +555,6 @@ document.getElementById('tts-toggle-btn').onclick = () => {
   tts.enabled = !tts.enabled;
   ttsSave(); ttsUpdateUI();
   if (!tts.enabled) ttsStop();
-  // На iOS Safari первый звук требует явного жеста — короткий пустой utterance разблокирует
   if (tts.enabled && tts.available) {
     try {
       const unlock = new SpeechSynthesisUtterance(' ');
@@ -589,7 +577,7 @@ document.getElementById('tts-voice-btn').onclick = () => ttsPickVoice();
 document.getElementById('tts-stop-btn').onclick = () => ttsStop();
 
 /* =========================================================
-   STATUS
+   STATUS — с расой/классом и DC-модификатором
    ========================================================= */
 function renderStatus() {
   if (!state) { statusEl.innerHTML = ''; return; }
@@ -598,6 +586,14 @@ function renderStatus() {
   const c = (state.conditions || []).length
     ? ' · ' + state.conditions.map(x => `<span style="color:#d45a5a">${esc(x)}</span>`).join(', ')
     : '';
+  const raceClass = [state.race, state.class].filter(Boolean).join(' · ');
+  const dc = state.dc_modifier || 0;
+  let dcChip = '';
+  if (dc !== 0) {
+    const cls = dc > 0 ? 'dc-up' : 'dc-down';
+    const sign = dc > 0 ? '+' : '';
+    dcChip = `<span class="status-chip ${cls}" title="${esc((state.dc_modifier_reasons||[]).join(', '))}">🎯 Сложность ${sign}${dc}</span>`;
+  }
   statusEl.innerHTML = `
     <div class="status-top">
       <div class="avatar-wrap" title="Нажмите, чтобы увидеть портрет">
@@ -605,9 +601,11 @@ function renderStatus() {
       </div>
       <div class="status-info">
         <div class="status-name">${esc(state.name || 'Пустой')}</div>
+        ${raceClass ? `<div class="status-sub">${esc(raceClass)}</div>` : ''}
         <div class="status-chips">
           <span class="status-chip">Ур. ${state.level}</span>
           <span class="status-chip">💰 ${state.gold}</span>
+          ${dcChip}
         </div>
       </div>
     </div>
@@ -624,19 +622,17 @@ function renderStatus() {
 }
 
 /* =========================================================
-   CHAT — addMsg с кнопкой 🔊
+   CHAT
    ========================================================= */
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
 
 function addMsg(role, text) {
   const d = document.createElement('div');
   d.className = 'msg ' + role;
-
   if (role === 'master') {
     const textSpan = document.createElement('span');
     textSpan.textContent = text;
     d.appendChild(textSpan);
-
     if (tts.available) {
       const btn = document.createElement('button');
       btn.className = 'speak-btn';
@@ -644,18 +640,14 @@ function addMsg(role, text) {
       btn.title = 'Озвучить';
       btn.onclick = (e) => {
         e.stopPropagation();
-        if (btn.classList.contains('playing')) {
-          ttsStop();
-        } else {
-          ttsSpeak(text, btn);
-        }
+        if (btn.classList.contains('playing')) ttsStop();
+        else ttsSpeak(text, btn);
       };
       d.appendChild(btn);
     }
   } else {
     d.textContent = text;
   }
-
   chatEl.appendChild(d);
   scrollBottom();
   return d;
@@ -673,9 +665,7 @@ function addHtmlMsg(role, html) {
 async function callAI(msgs) {
   busy = true; sendBtn.disabled = true;
   document.querySelectorAll('.quick-btn').forEach(b => b.disabled = true);
-  // остановить текущую озвучку, если играет
   if (tts.speaking) ttsStop();
-
   const md = document.createElement('div');
   md.className = 'msg master typing-indicator';
   chatEl.appendChild(md); scrollBottom();
@@ -691,7 +681,7 @@ async function callAI(msgs) {
     while (true) {
       const {done, value} = await reader.read();
       if (done) break;
-      const c = dec.decode(value, { stream: true});
+      const c = dec.decode(value, {stream: true});
       if (!c) continue;
       full += c; md.textContent = full; scrollBottom();
     }
@@ -704,13 +694,10 @@ async function callAI(msgs) {
   if (full.trim()) {
     messages.push({role: 'assistant', content: full});
     persist();
-    // Превратить финальный master div в сообщение с кнопкой 🔊
     md.remove();
     const finalMsg = addMsg('master', full);
-
     tts.lastText = full;
     if (tts.enabled && tts.available) {
-      // Дать DOM обновиться и найти кнопку
       setTimeout(() => {
         const btn = finalMsg.querySelector('.speak-btn');
         ttsSpeak(full, btn);
@@ -785,11 +772,14 @@ async function doRoll(expr) {
     const m = d.mod ? (d.mod > 0 ? '+' + d.mod : '' + d.mod) : '';
     addHtmlMsg('dice', `🎲 <b>${esc(d.expr)}</b> → [${d.rolls.join(', ')}]${m} = <b>${d.total}</b>`);
     messages.push({role: 'user', content:
-      `[[БРОСОК]] ${d.expr} → [${d.rolls.join(', ')}]${m} = ${d.total}. Опиши результат, успех/провал/осложнение. Не решай за игрока.`});
+      `[[БРОСОК]] ${d.expr} → [${d.rolls.join(', ')}]${m} = ${d.total}. Сравни с DC, который ты объявил ранее. Опиши результат, успех/провал/осложнение. Не решай за игрока.`});
     persist(); await callAI(messages);
   } catch(e) { addMsg('system', 'Ошибка: ' + e.message); }
 }
 
+/* =========================================================
+   SHEET — с расой, классом, DC
+   ========================================================= */
 async function doSheet() {
   if (!state) return;
   const s = state.stats || {};
@@ -802,6 +792,7 @@ async function doSheet() {
   const cd = (state.conditions || []).length
     ? state.conditions.map(c => `<span class="tag">${esc(c)}</span>`).join('')
     : '<span class="tag empty">нет</span>';
+
   const relColor = (att) => {
     if (att === 'дружелюбен' || att === 'предан') return '#7fbf7f';
     if (att === 'враждебен') return '#d45a5a';
@@ -813,6 +804,7 @@ async function doSheet() {
         `<span class="tag" style="border-color:${relColor(r.attitude)};color:${relColor(r.attitude)}">${esc(r.name)} — ${esc(r.attitude)}${r.note ? ' (' + esc(r.note) + ')' : ''}</span>`
       ).join('')
     : '<span class="tag empty">никого нет</span>';
+
   const clocks = (state.faction_clocks || []).length
     ? state.faction_clocks.map(c => {
         const pct = Math.round((c.progress || 0) / (c.max || 6) * 100);
@@ -827,21 +819,44 @@ async function doSheet() {
         </div>`;
       }).join('')
     : '<div class="tag empty">тихо</div>';
+
+  const dc = state.dc_modifier || 0;
+  const dcBoxCls = dc > 0 ? 'up' : (dc < 0 ? 'down' : '');
+  const dcSign = dc > 0 ? '+' : '';
+  const dcReasons = (state.dc_modifier_reasons || []).length
+    ? state.dc_modifier_reasons.map(r => `<span class="tag">${esc(r)}</span>`).join('')
+    : '<span class="tag empty">нет модификаторов</span>';
+  const dcBox = `
+    <div class="dc-box ${dcBoxCls}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:var(--text-secondary);font-size:12px">🎯 Модификатор сложности</span>
+        <span class="dc-val ${dc === 0 ? 'neutral' : ''}">${dc === 0 ? '0' : dcSign + dc}</span>
+      </div>
+      <div class="tags">${dcReasons}</div>
+    </div>`;
+
+  const statMod = (val) => {
+    const m = Math.floor((val - 10) / 2);
+    return m >= 0 ? '+' + m : '' + m;
+  };
   const cached = cachedAvatarFor(state.name);
   const avatar = cached
     ? `<img class="avatar-large" src="${cached.url}" alt="${esc(state.name)}" style="width:140px;height:140px">`
     : '';
+
   modalContent.innerHTML = `
     ${avatar}
     <h3>📜 ${esc(state.name || 'Пустой')}</h3>
+    ${state.race || state.class ? `<div class="kv"><span class="k">Раса · Класс</span><span class="v">${esc(state.race || '—')} · ${esc(state.class || '—')}</span></div>` : ''}
     <div class="kv"><span class="k">Уровень</span><span class="v">${state.level}</span></div>
     <div class="kv"><span class="k">Опыт</span><span class="v">${state.xp} / ${state.xp_next}</span></div>
     <div class="kv"><span class="k">Здоровье</span><span class="v">${state.hp} / ${state.max_hp}</span></div>
     <div class="kv"><span class="k">Золото</span><span class="v">${state.gold}</span></div>
     <h3 style="margin-top:12px;font-size:15px">Характеристики</h3>
     <div class="stats-grid">${['str','dex','con','int','wis','cha'].map(k =>
-      `<div class="stat-box"><div class="lbl">${k.toUpperCase()}</div><div class="val">${s[k] || 10}</div></div>`
+      `<div class="stat-box"><div class="lbl">${k.toUpperCase()}</div><div class="val">${s[k] || 10}</div><div class="mod">${statMod(s[k] || 10)}</div></div>`
     ).join('')}</div>
+    ${dcBox}
     <h3 style="margin-top:12px;font-size:15px">Инвентарь</h3><div class="tags">${inv}</div>
     <h3 style="margin-top:12px;font-size:15px">Квесты</h3><div class="tags">${qs}</div>
     <h3 style="margin-top:12px;font-size:15px">Состояния</h3><div class="tags">${cd}</div>
@@ -912,16 +927,15 @@ function renderAll() {
       addMsg('master', m.content);
     }
   });
-  // После перерисовки берём текст последнего ответа мастера для «Озвучить последний»
   const lastMaster = [...messages].reverse().find(m => m.role === 'assistant');
   if (lastMaster) tts.lastText = lastMaster.content;
 }
 
 function showIntro() {
   addMsg('system', 'Опишите персонажа, мир, тон и стартовую ситуацию.\n' +
-    'Например: «Я — вор-полуэльф Кейр, тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
-    'Или выберите готовый мир в меню ☰ → «Готовые миры».\n' +
-    'Портрет персонажа появится автоматически, как только мастер узнает имя.');
+    'Например: «Я — эльф-плут Кейр, тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
+    'Мастер сам выставит характеристики по расе и классу.\n' +
+    'Или выберите готовый мир в меню ☰ → «Готовые миры».');
 }
 
 function renderWorlds() {
@@ -941,8 +955,8 @@ function renderWorlds() {
       ttsStop();
       chatEl.innerHTML = '';
       renderStatus();
-      addMsg('system', `Выбран мир: ${world.name}\n${world.desc}`);
-      messages.push({role: 'user', content: world.prompt});
+      addMsg('system', `Выбран мир: ${world.name}\n${world.desc}\n\nОпишите персонажа: раса, класс, имя.`);
+      messages.push({role: 'user', content: world.prompt + ' Если я не описал персонажа — сначала предложи 2–3 варианта расы и класса на выбор.'});
       persist();
       callAI(messages);
     };
@@ -1040,8 +1054,13 @@ function init() {
   if (saved && saved.messages.length) {
     messages = saved.messages;
     state = saved.state || {...EMPTY_STATE};
+    // Совместимость со старыми сохранениями
     if (!Array.isArray(state.relationships)) state.relationships = [];
     if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
+    if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
+    if (typeof state.dc_modifier !== 'number') state.dc_modifier = 0;
+    if (typeof state.race !== 'string') state.race = '';
+    if (typeof state.class !== 'string') state.class = '';
     renderAll(); renderStatus();
     addMsg('system', '↩ История восстановлена. Продолжайте.');
   } else {
