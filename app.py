@@ -9,13 +9,22 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
+# ============================================================
+# НАСТРОЙКИ
+# ============================================================
+
 MODEL = os.getenv("OPENAI_MODEL", "gpt-6-luna")
 BASE_URL = os.getenv("OPENAI_BASE_URL") or None
 API_KEY = os.getenv("OPENAI_API_KEY")
+
 if not API_KEY and BASE_URL:
     API_KEY = "ollama"
+
 if not API_KEY:
-    raise SystemExit("Не задан OPENAI_API_KEY.")
+    raise SystemExit(
+        "Не задан OPENAI_API_KEY.\n"
+        "Задайте переменную окружения OPENAI_API_KEY (или используйте OPENAI_BASE_URL для Ollama)."
+    )
 
 if BASE_URL:
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
@@ -25,6 +34,10 @@ else:
 SAVES_DIR = Path("saves")
 SAVES_DIR.mkdir(exist_ok=True)
 
+
+# ============================================================
+# СИСТЕМНЫЙ ПРОМПТ — «живой мир»
+# ============================================================
 
 SYSTEM_PROMPT = """
 Ты — ведущий (мастер) текстовой ролевой игры в жанре тёмного фэнтези / D&D / LitRPG.
@@ -121,6 +134,10 @@ NPC отвечают в своей манере, помнят поступки �
 """
 
 
+# ============================================================
+# ЭКСТРАКТОР ЛИСТА ПЕРСОНАЖА
+# ============================================================
+
 STATE_EXTRACT_PROMPT = """
 Ты — модуль отслеживания состояния персонажа в RPG. На основе диалога обнови состояние.
 
@@ -166,6 +183,29 @@ STATE_EXTRACT_PROMPT = """
 - Не раскрывай игроку progress напрямую в тексте ответа — только через мир.
 """
 
+
+# ============================================================
+# ПРОМПТ ДЛЯ СЖАТИЯ ПАМЯТИ (Шаг 2)
+# ============================================================
+
+SUMMARY_PROMPT = """
+Ты — архивариус ролевой игры. Сожми старый фрагмент диалога в краткое резюме для продолжения.
+
+СОХРАНИ:
+- Ключевые события (что произошло, к чему привело)
+- Имена NPC и отношение к игроку
+- Принятые решения и их последствия
+- Открытые вопросы, цели, долги
+- Установленные факты мира (места, предметы, правила)
+
+НЕ ВКЛЮЧАЙ:
+- Дословные реплики
+- Эмоциональные описания и атмосферу
+- Повторения
+
+Формат: 1 плотный абзац, 3–6 предложений. Только суть, как заметка в дневнике.
+"""
+
 DICE_RE = re.compile(r"^\s*(\d*)d(\d+)([+-]\d+)?\s*$", re.IGNORECASE)
 
 DEFAULT_STATE = {
@@ -177,6 +217,74 @@ DEFAULT_STATE = {
     "relationships": [], "faction_clocks": []
 }
 
+
+# ============================================================
+# СЖАТИЕ ПАМЯТИ (Шаг 2)
+# ============================================================
+
+MAX_MESSAGES_BEFORE_SUMMARY = 25   # порог срабатывания (сообщений в истории)
+KEEP_RECENT = 8                    # сколько последних сообщений сохранять дословно
+
+
+def summarize_old_messages(messages):
+    """
+    Сжимает старую часть истории в одно резюме. Возвращает новый список.
+
+    Логика:
+    - если сообщений <= MAX_MESSAGES_BEFORE_SUMMARY — не трогаем
+    - иначе берём все кроме последних KEEP_RECENT и сжимаем в резюме
+    - в итоге возвращаем: [system, [РЕЗЮМЕ...], ...последние KEEP_RECENT]
+    - НЕ суммируем повторно, если резюме уже есть — иначе цикл
+    """
+    if len(messages) <= MAX_MESSAGES_BEFORE_SUMMARY:
+        return messages
+
+    system = messages[0]
+    body = messages[1:]
+
+    if len(body) <= KEEP_RECENT * 2:
+        return messages
+
+    # Если в истории уже есть свежее резюме — не плодим второе
+    for m in messages:
+        if m.get("role") == "system" and m.get("content", "").startswith("[РЕЗЮМЕ"):
+            return messages
+
+    to_summarize = body[:-KEEP_RECENT]
+    recent = body[-KEEP_RECENT:]
+
+    dialogue = "\n".join(
+        f"{m['role']}: {m['content']}"
+        for m in to_summarize if m.get("content")
+    )
+    if not dialogue.strip():
+        return messages
+
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": SUMMARY_PROMPT},
+                {"role": "user", "content": f"ДИАЛОГ:\n{dialogue}\n\nСожми в резюме."},
+            ],
+            temperature=0.3,
+        )
+        summary = (resp.choices[0].message.content or "").strip()
+        if not summary:
+            return messages
+
+        return [
+            system,
+            {"role": "system", "content": f"[РЕЗЮМЕ ПРОШЛОГО]\n{summary}"}
+        ] + recent
+    except Exception:
+        # Если что-то пошло не так — не ломаем игру, отдаём как есть
+        return messages
+
+
+# ============================================================
+# УТИЛИТЫ
+# ============================================================
 
 def roll_dice(expr):
     m = DICE_RE.match(expr or "")
@@ -239,6 +347,10 @@ def extract_state(messages, current_state):
         return current_state
 
 
+# ============================================================
+# МАРШРУТЫ
+# ============================================================
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -262,11 +374,16 @@ def api_chat():
     if messages[0].get("role") != "system":
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
 
+    # ШАГ 2: сжимаем историю перед отправкой в модель
+    messages = summarize_old_messages(messages)
+
     def generate():
         try:
             stream = client.chat.completions.create(
-                model=MODEL, messages=messages,
-                temperature=0.9, stream=True,
+                model=MODEL,
+                messages=messages,
+                temperature=0.9,
+                stream=True,
             )
             for chunk in stream:
                 if not chunk.choices:
@@ -321,6 +438,10 @@ def api_load(name):
         data = {"messages": data, "state": DEFAULT_STATE}
     return jsonify(data)
 
+
+# ============================================================
+# ЗАПУСК
+# ============================================================
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
