@@ -246,7 +246,6 @@
   }
   .dice-preset:active { background: #3a342f; }
   .dice-preset.active { border-color: var(--accent-gold); color: var(--accent-gold); }
-  /* Заметки */
   .note-tabs {
     display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
     scrollbar-width: none;
@@ -450,13 +449,16 @@ function detectArchetype(st) {
   }
   return best[1];
 }
+
+// ⬇⬇⬇ ОБНОВЛЕНО: улучшенный промпт для портрета
 function buildAvatarPrompt(st) {
   const archetype = detectArchetype(st);
   const conditions = (st.conditions || []).join(', ');
   const race = st.race ? st.race + ' ' : '';
   const name = st.name || 'Adventurer';
-  return `Fantasy RPG character portrait of ${name}, ${race}${archetype}, level ${st.level}, detailed digital painting, dramatic lighting, dark atmospheric background, painterly style, high quality, centered composition${conditions ? ', ' + conditions : ''}`;
+  return `Portrait of ${name}, a ${race}${archetype}, level ${st.level}, detailed digital painting, dramatic lighting, dark fantasy style, centered composition, high quality, head and shoulders${conditions ? ', ' + conditions : ''}`;
 }
+
 function cachedAvatarFor(name) {
   try {
     const raw = localStorage.getItem(AVATAR_KEY);
@@ -469,19 +471,30 @@ function cachedAvatarFor(name) {
 function saveAvatar(name, url) {
   try { localStorage.setItem(AVATAR_KEY, JSON.stringify({name, url})); } catch(e){}
 }
+
+// ⬇⬇⬇ ОБНОВЛЕНО: новый Pollinations-эндпоинт с 512x512, model=flux, enhance
 function generateAvatar(force) {
   if (!state || !state.name || state.name === 'Пустой') return;
   const wrap = document.querySelector('.avatar-wrap');
   if (!wrap) return;
+
   if (!force) {
     const cached = cachedAvatarFor(state.name);
-    if (cached) { wrap.innerHTML = `<img src="${cached.url}" alt="${esc(state.name)}">`; return; }
+    if (cached) {
+      wrap.innerHTML = `<img src="${cached.url}" alt="${esc(state.name)}">`;
+      return;
+    }
   }
+
   wrap.innerHTML = '<div class="avatar-placeholder">?</div>';
   wrap.classList.add('loading');
+
   const prompt = buildAvatarPrompt(state);
   const seed = Math.floor(Math.random() * 999999);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=256&height=256&seed=${seed}&nologo=true&model=flux&enhance=true`;
+
+  // Новый эндпоинт — 512×512, flux, enhance, nologo
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&seed=${seed}&nologo=true&model=flux&enhance=true`;
+
   const img = new Image();
   img.crossOrigin = 'anonymous';
   img.onload = () => {
@@ -490,6 +503,7 @@ function generateAvatar(force) {
     saveAvatar(state.name, url);
   };
   img.onerror = () => {
+    // Резервный вариант, если Pollinations не ответил
     const fallback = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(state.name)}&backgroundColor=24201d&radius=50`;
     wrap.classList.remove('loading');
     wrap.innerHTML = `<img src="${fallback}" alt="${esc(state.name)}">`;
@@ -497,6 +511,7 @@ function generateAvatar(force) {
   };
   img.src = url;
 }
+
 function maybeGenerateAvatar() {
   if (!state || !state.name || state.name === 'Пустой') return;
   const cached = cachedAvatarFor(state.name);
@@ -798,7 +813,7 @@ async function callAI(msgs) {
     while (true) {
       const {done, value} = await reader.read();
       if (done) break;
-      const c = dec.decode(value, { stream: true});
+      const c = dec.decode(value, {stream: true});
       if (!c) continue;
       full += c; md.textContent = full; scrollBottom();
     }
@@ -1032,17 +1047,15 @@ async function doSheet() {
   modalEl.classList.add('open');
 }
 
-/* NOTES — отдельная вкладка */
+/* NOTES */
 async function doNotes() {
   if (!state) return;
   const notes = (state.notes || []).slice();
-
   const typeOrder = ['notification', 'letter', 'document', 'journal', 'note', 'rumor'];
   const types = [...new Set(notes.map(n => n.type || 'note'))].sort((a, b) => {
     const ia = typeOrder.indexOf(a); const ib = typeOrder.indexOf(b);
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
-
   let activeFilter = 'all';
 
   function renderList() {
@@ -1051,10 +1064,8 @@ async function doNotes() {
       if (a.unread !== b.unread) return a.unread ? -1 : 1;
       return 0;
     });
-
     const counts = { all: notes.length };
     types.forEach(t => { counts[t] = notes.filter(n => (n.type || 'note') === t).length; });
-
     const tabsHtml = `
       <div class="note-tabs">
         <div class="note-tab ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">Все (${counts.all})</div>
@@ -1063,7 +1074,6 @@ async function doNotes() {
           return `<div class="note-tab ${activeFilter === t ? 'active' : ''}" data-filter="${t}">${info.icon} ${info.label} (${counts[t]})</div>`;
         }).join('')}
       </div>`;
-
     const listHtml = sorted.length ? sorted.map(n => {
       const info = NOTE_TYPES[n.type] || NOTE_TYPES.note;
       const unreadClass = n.unread ? 'unread' : '';
@@ -1085,30 +1095,22 @@ async function doNotes() {
           </div>
         </div>`;
     }).join('') : '<div class="tag empty">нет заметок</div>';
-
     modalContent.innerHTML = `
       <h3>📝 Заметки</h3>
       ${tabsHtml}
       <div style="max-height:50vh;overflow-y:auto;margin-top:8px">${listHtml}</div>
       <button class="btn primary" style="margin-top:6px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
-
-    // Обработчики
     modalContent.querySelectorAll('.note-tab').forEach(tab => {
       tab.onclick = () => { activeFilter = tab.dataset.filter; renderList(); };
     });
     modalContent.querySelectorAll('.note-card').forEach(card => {
       card.onclick = (e) => {
-        // Клик по кнопке — обрабатываем отдельно
         if (e.target.closest('.note-action-btn')) return;
         const id = card.dataset.id;
         const note = notes.find(n => n.id === id);
         if (note) {
           note._expanded = !note._expanded;
-          // Раскрытие = прочитано
-          if (note.unread) {
-            note.unread = false;
-            saveNotesToState();
-          }
+          if (note.unread) { note.unread = false; saveNotesToState(); }
           renderList();
         }
       };
@@ -1120,11 +1122,8 @@ async function doNotes() {
         const action = btn.dataset.action;
         const idx = notes.findIndex(n => n.id === id);
         if (idx === -1) return;
-        if (action === 'read') {
-          notes[idx].unread = false;
-        } else if (action === 'delete') {
-          notes.splice(idx, 1);
-        }
+        if (action === 'read') { notes[idx].unread = false; }
+        else if (action === 'delete') { notes.splice(idx, 1); }
         saveNotesToState();
         renderList();
         updateNotesBadge();
@@ -1133,7 +1132,6 @@ async function doNotes() {
   }
 
   function saveNotesToState() {
-    // Убираем служебное поле _expanded перед сохранением
     state.notes = notes.map(n => {
       const copy = { ...n };
       delete copy._expanded;
@@ -1165,10 +1163,8 @@ async function doSkills() {
         const usesText = isPassive ? '∞' : `${a.uses_left ?? a.uses_max}/${a.uses_max}`;
         const isEmpty = !isPassive && (a.uses_left || 0) === 0;
         const rechargeLabel = {
-          'passive': 'пассивное',
-          'short_rest': 'короткий отдых',
-          'long_rest': 'долгий отдых',
-          'day': 'раз в день'
+          'passive': 'пассивное', 'short_rest': 'короткий отдых',
+          'long_rest': 'долгий отдых', 'day': 'раз в день'
         }[a.recharge] || '';
         return `<div class="ability-card ${isPassive ? 'passive' : ''}">
           <div class="ability-header">
@@ -1245,8 +1241,7 @@ function doHelp() {
     '<code>/notes</code> — заметки, письма, документы<br>' +
     '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
     '<code>/reset</code> — новая игра<br><br>' +
-    'Заметки, письма, документы, слухи — в отдельной вкладке 📝, не в инвентаре.<br>' +
-    'XP начисляется за убийства, победы без убийства и завершённые квесты.');
+    'Аватар генерируется через Pollinations.ai — бесплатно, без ключа.');
 }
 function renderAll() {
   chatEl.innerHTML = '';
@@ -1265,7 +1260,7 @@ function showIntro() {
   addMsg('system', 'Опишите персонажа, мир, тон и стартовую ситуацию.\n' +
     'Например: «Я — эльф-плут Кейр, Преступник. Тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
     'Мастер выставит характеристики, навыки, умения. XP за убийства и квесты начисляется автоматически.\n' +
-    'Письма, документы и слухи — в отдельной вкладке 📝 Заметки.');
+    'Портрет персонажа появится через 5–15 секунд после первого ответа.');
 }
 function renderWorlds() {
   const container = document.getElementById('worlds-section');
@@ -1426,7 +1421,6 @@ function init() {
   if (saved && saved.messages.length) {
     messages = saved.messages;
     state = saved.state || {...EMPTY_STATE};
-    // Совместимость
     if (!Array.isArray(state.relationships)) state.relationships = [];
     if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
     if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
