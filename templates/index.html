@@ -65,6 +65,7 @@
   .status-chip.dc-down { color: #7fbf7f; border-color: #2a4a2a; background: #1f2a1f; }
   .status-chip.pos { color: #b48cff; border-color: #4a3a6e; background: #1f1a2a; }
   .status-chip.cover { color: #5a8ed4; border-color: #2a3a5a; background: #1a1f2a; }
+  .status-chip.notes { color: #e8c8a8; border-color: #5a3a2a; background: #2a1f1a; cursor: pointer; }
   .bar-wrap { flex: 1; height: 6px; background: var(--bg-deep); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-subtle); }
   .bar-fill { height: 100%; transition: width 0.4s ease; border-radius: 4px; }
   .bar-hp { background: linear-gradient(90deg, #6b2020, #a63a3a, #d45a5a); }
@@ -178,7 +179,12 @@
   #drawer.open { transform: translateX(0); }
   #drawer h2 { font-size: 12px; color: var(--accent-gold); margin: 12px 0 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; }
   .drawer-section { display: flex; flex-direction: column; gap: 8px; }
-  #drawer .btn { width: 100%; text-align: left; padding: 12px 16px; font-size: 15px; }
+  #drawer .btn { width: 100%; text-align: left; padding: 12px 16px; font-size: 15px; position: relative; }
+  .drawer-badge {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: var(--accent-gold); color: #1a1614; border-radius: 10px;
+    padding: 1px 7px; font-size: 11px; font-weight: 700;
+  }
   #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
   #modal.open { display: flex; }
   .modal-content { background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 24px; width: 100%; max-width: 460px; max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
@@ -240,6 +246,45 @@
   }
   .dice-preset:active { background: #3a342f; }
   .dice-preset.active { border-color: var(--accent-gold); color: var(--accent-gold); }
+  /* Заметки */
+  .note-tabs {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .note-tabs::-webkit-scrollbar { display: none; }
+  .note-tab {
+    padding: 6px 12px; border-radius: 16px; font-size: 12px;
+    background: var(--bg-card); color: var(--text-secondary);
+    border: 1px solid var(--border-subtle); cursor: pointer;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .note-tab.active { background: var(--accent-gold); color: #1a1614; border-color: var(--accent-gold); font-weight: 600; }
+  .note-card {
+    background: var(--bg-card); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .note-card:active { background: #3a342f; }
+  .note-card.unread { border-left: 3px solid var(--accent-gold); }
+  .note-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px; gap: 8px;
+  }
+  .note-title { font-weight: 600; color: var(--text-primary); font-size: 14px; flex: 1; }
+  .note-type-badge {
+    font-size: 10px; color: var(--text-secondary);
+    background: var(--bg-deep); padding: 1px 6px; border-radius: 4px;
+  }
+  .note-meta { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+  .note-content { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+  .note-content.expanded { color: var(--text-primary); }
+  .note-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .note-action-btn {
+    background: transparent; border: 1px solid var(--border-subtle);
+    color: var(--text-secondary); border-radius: 6px;
+    padding: 3px 8px; font-size: 11px; cursor: pointer;
+  }
+  .note-action-btn:active { background: var(--bg-deep); }
 </style>
 </head>
 <body>
@@ -262,6 +307,7 @@
   <button class="quick-btn" data-quick="/roll 1d20">🎲 d20</button>
   <button class="quick-btn" id="quick-custom-roll">🎲 Свой</button>
   <button class="quick-btn" data-quick="/skills">🎯 Умения</button>
+  <button class="quick-btn" data-quick="/notes">📝 Заметки</button>
 </div>
 
 <div id="chat"></div>
@@ -279,6 +325,7 @@
     <button class="btn" data-action="dice-custom">🎲 Свой бросок...</button>
     <button class="btn" data-action="sheet">📜 Полный лист</button>
     <button class="btn" data-action="skills">🎯 Умения и навыки</button>
+    <button class="btn" data-action="notes">📝 Заметки <span class="drawer-badge" id="drawer-notes-badge" style="display:none">0</span></button>
   </div>
   <h2>Готовые миры</h2>
   <div class="drawer-section" id="worlds-section"></div>
@@ -312,7 +359,7 @@ const modalEl = document.getElementById('modal');
 const modalContent = document.getElementById('modal-content');
 const statusEl = document.getElementById('status');
 
-const LS_KEY = 'rpg_session_v8';
+const LS_KEY = 'rpg_session_v9';
 const AVATAR_KEY = 'rpg_avatar_v1';
 const TTS_KEY = 'rpg_tts_v1';
 
@@ -322,7 +369,7 @@ const EMPTY_STATE = {
   hp:10, max_hp:10, gold:0,
   stats:{str:10,dex:10,con:10,int:10,wis:10,cha:10},
   proficiencies:[], skills:[], abilities:[],
-  inventory:[], quests:[], conditions:[],
+  inventory:[], notes:[], quests:[], conditions:[],
   relationships:[], faction_clocks:[],
   dc_modifier:0, dc_modifier_reasons:[],
   position:"стоит", cover:"нет",
@@ -330,13 +377,22 @@ const EMPTY_STATE = {
   level_history:[]
 };
 
+const NOTE_TYPES = {
+  note:         { icon: '📝', label: 'Заметка' },
+  letter:       { icon: '✉',  label: 'Письмо' },
+  document:     { icon: '📜', label: 'Документ' },
+  notification: { icon: '🔔', label: 'Уведомление' },
+  rumor:        { icon: '💬', label: 'Слух' },
+  journal:      { icon: '📔', label: 'Дневник' }
+};
+
 const READY_WORLDS = [
-  { id: 'forgotten_realms', name: 'Забытые Королевства', desc: 'Классическое D&D. Шахта Фандальвера, гоблины, драконы.', prompt: 'Мир: Забытые Королевства. Начни приключение "Шахта Фандальвера". Я и мои спутники сопровождаем караван дворфа Гундрена Роксвика в город Фандалин. Начинается всё с засады гоблинов на дороге. Опиши сцену, дай мне возможность действовать.' },
-  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Начни с прибытия в Баровию. Атмосфера — готический хоррор, постоянное напряжение, страх, вампиры и нежить.' },
-  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать серию загадочных краж, связанных с запретными магическими технологиями. Начни с прибытия на место преступления.' },
-  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы получили заказ на перевозку таинственного груза через Астральное море. Начни с момента, когда мы обнаруживаем, что за нами следует неизвестный корабль.' },
-  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Позади остался город-государство тирана-колдуна. Впереди — бескрайняя пустыня, где вода на вес золота. Начни с того, как я и мои спутники пытаемся найти убежище на ночь.' },
-  { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG. Система пришла на Землю. Я — обычный человек с интерфейсом уровня и характеристик. Вокруг появляются монстры. Начни с первой Системы и первого монстра.' }
+  { id: 'forgotten_realms', name: 'Забытые Королевства', desc: 'Классическое D&D. Шахта Фандальвера, гоблины, драконы.', prompt: 'Мир: Забытые Королевства. Начни приключение "Шахта Фандальвера". Я и мои спутники сопровождаем караван дворфа Гундрена Роксвика в город Фандалин. Начинается всё с засады гоблинов на дороге.' },
+  { id: 'ravenloft', name: 'Равенлофт (Готик-хоррор)', desc: 'Земля Баровия, вампир Страд, вечный туман и ужас.', prompt: 'Мир: Равенлофт (Баровия). Я и моя группа путников заблудились в тумане и вышли к мрачной земле. Начни с прибытия в Баровию.' },
+  { id: 'eberron', name: 'Эберрон (Стимпанк)', desc: 'Город Шарн, магия и механизмы, нуар и интриги.', prompt: 'Мир: Эберрон. Я — детектив в городе Шарн. Мне поручили расследовать кражу запретных магических технологий. Начни с прибытия на место преступления.' },
+  { id: 'spelljammer', name: 'Спеллджаммер (Космос)', desc: 'Космический галеон, астральное море, пираты.', prompt: 'Мир: Спеллджаммер. Я — капитан космического корабля. Мы перевозим таинственный груз через Астральное море. Начни с обнаружения неизвестного корабля позади.' },
+  { id: 'dark_sun', name: 'Тёмное Солнце (Пустоши)', desc: 'Выжженная пустыня, рабство, выживание, псионика.', prompt: 'Мир: Тёмное Солнце (Атас). Я — беглый раб в пустошах. Впереди — бескрайняя пустыня. Начни с поиска убежища на ночь.' },
+  { id: 'litrpg_apocalypse', name: 'LitRPG: Система', desc: 'Земля после Системы. Монстры, уровни, прокачка.', prompt: 'Мир: LitRPG. Система пришла на Землю. Я — обычный человек с интерфейсом уровня и характеристик. Начни с первой Системы и первого монстра.' }
 ];
 
 function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify({messages, state})); } catch(e){} }
@@ -353,9 +409,7 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-/* =========================================================
-   POSITION / COVER
-   ========================================================= */
+/* POSITION / COVER */
 const POSITION_LABELS = {
   'стоит': { icon: '🧍', label: 'Стоит', mod: 0 },
   'сидит': { icon: '🪑', label: 'Сидит', mod: 0 },
@@ -376,9 +430,7 @@ const COVER_LABELS = {
 function getPositionInfo(pos) { return POSITION_LABELS[pos] || { icon: '❔', label: pos || '—', mod: 0 }; }
 function getCoverInfo(cov) { return COVER_LABELS[cov] || { icon: '', label: cov || '—', mod: 0 }; }
 
-/* =========================================================
-   AVATAR
-   ========================================================= */
+/* AVATAR */
 function detectArchetype(st) {
   const s = st.stats || {};
   const cls = (st.class || '').toLowerCase();
@@ -390,9 +442,7 @@ function detectArchetype(st) {
     'друид': 'druid nature shaman', 'бард': 'bard musician',
     'колдун': 'warlock dark mage', 'чародей': 'sorcerer magic'
   };
-  for (const key in clsMap) {
-    if (cls.includes(key)) return clsMap[key];
-  }
+  for (const key in clsMap) { if (cls.includes(key)) return clsMap[key]; }
   const values = [['str','warrior knight'],['dex','rogue thief'],['int','wizard mage'],['wis','cleric druid'],['cha','bard warlock']];
   let best = ['str', 'adventurer'], maxVal = -1;
   for (const [k, role] of values) {
@@ -425,10 +475,7 @@ function generateAvatar(force) {
   if (!wrap) return;
   if (!force) {
     const cached = cachedAvatarFor(state.name);
-    if (cached) {
-      wrap.innerHTML = `<img src="${cached.url}" alt="${esc(state.name)}">`;
-      return;
-    }
+    if (cached) { wrap.innerHTML = `<img src="${cached.url}" alt="${esc(state.name)}">`; return; }
   }
   wrap.innerHTML = '<div class="avatar-placeholder">?</div>';
   wrap.classList.add('loading');
@@ -455,11 +502,8 @@ function maybeGenerateAvatar() {
   const cached = cachedAvatarFor(state.name);
   const wrap = document.querySelector('.avatar-wrap');
   if (!wrap) return;
-  if (cached) {
-    wrap.innerHTML = `<img src="${cached.url}" alt="${esc(state.name)}">`;
-  } else {
-    generateAvatar(false);
-  }
+  if (cached) { wrap.innerHTML = `<img src="${cached.url}" alt="${esc(state.name)}">`; }
+  else { generateAvatar(false); }
 }
 function openAvatarModal() {
   if (!state || !state.name || state.name === 'Пустой') {
@@ -482,9 +526,7 @@ function openAvatarModal() {
   };
 }
 
-/* =========================================================
-   TTS
-   ========================================================= */
+/* TTS */
 const tts = {
   enabled: false, voice: null, rate: 1.0, speaking: false,
   lastText: '', available: ('speechSynthesis' in window)
@@ -522,7 +564,7 @@ function ttsClean(text) {
   return text
     .replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '')
     .replace(/\*+.*?\*+/g, '')
-    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡⭐📈✓✗●▶○🎁🏛👤]/g, '')
+    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡⭐📈✓✗●▶○🎁🏛👤📝✉🔔💬📔]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
     .replace(/\s+/g, ' ').trim();
@@ -619,9 +661,35 @@ document.getElementById('tts-speed-btn').onclick = () => {
 document.getElementById('tts-voice-btn').onclick = () => ttsPickVoice();
 document.getElementById('tts-stop-btn').onclick = () => ttsStop();
 
-/* =========================================================
-   STATUS
-   ========================================================= */
+/* NOTES BADGE */
+function updateNotesBadge() {
+  const notes = state?.notes || [];
+  const unread = notes.filter(n => n.unread).length;
+  const badge = document.getElementById('drawer-notes-badge');
+  if (badge) {
+    if (unread > 0) {
+      badge.textContent = unread;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  const chip = document.getElementById('status-notes-chip');
+  if (chip) chip.remove();
+  if (unread > 0) {
+    const chips = document.querySelector('.status-chips');
+    if (chips) {
+      const s = document.createElement('span');
+      s.id = 'status-notes-chip';
+      s.className = 'status-chip notes';
+      s.textContent = `📝 ${unread} новых`;
+      s.onclick = () => doNotes();
+      chips.appendChild(s);
+    }
+  }
+}
+
+/* STATUS */
 function renderStatus() {
   if (!state) { statusEl.innerHTML = ''; return; }
   const hpPct = state.max_hp ? Math.max(0, Math.min(100, state.hp / state.max_hp * 100)) : 0;
@@ -673,11 +741,10 @@ function renderStatus() {
   const wrap = statusEl.querySelector('.avatar-wrap');
   if (wrap) wrap.onclick = openAvatarModal;
   maybeGenerateAvatar();
+  updateNotesBadge();
 }
 
-/* =========================================================
-   CHAT
-   ========================================================= */
+/* CHAT */
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
 function addMsg(role, text) {
   const d = document.createElement('div');
@@ -711,9 +778,7 @@ function addHtmlMsg(role, html) {
   chatEl.appendChild(d); scrollBottom(); return d;
 }
 
-/* =========================================================
-   API CALLS
-   ========================================================= */
+/* API CALLS */
 async function callAI(msgs) {
   busy = true; sendBtn.disabled = true;
   document.querySelectorAll('.quick-btn').forEach(b => b.disabled = true);
@@ -733,7 +798,7 @@ async function callAI(msgs) {
     while (true) {
       const {done, value} = await reader.read();
       if (done) break;
-      const c = dec.decode(value, {stream: true});
+      const c = dec.decode(value, { stream: true});
       if (!c) continue;
       full += c; md.textContent = full; scrollBottom();
     }
@@ -775,9 +840,7 @@ async function updateState() {
   } catch(e){}
 }
 
-/* =========================================================
-   SEND
-   ========================================================= */
+/* SEND */
 async function sendMessage(text) {
   if (busy) return;
   text = (text || '').trim();
@@ -799,6 +862,7 @@ function handleCommand(cmd, arg) {
     case '/roll': return doRoll(arg || '1d20');
     case '/sheet': return doSheet();
     case '/skills': return doSkills();
+    case '/notes': return doNotes();
     case '/save': return doSave(arg);
     case '/load': return doLoad(arg);
     case '/reset': return doReset();
@@ -827,13 +891,10 @@ async function doRoll(expr) {
   } catch(e) { addMsg('system', 'Ошибка: ' + e.message); }
 }
 
-/* =========================================================
-   SHEET
-   ========================================================= */
+/* SHEET */
 async function doSheet() {
   if (!state) return;
   const s = state.stats || {};
-
   const quests = (state.quests || []).map(q => {
     if (typeof q === 'string') {
       return { id: 'old-' + q, name: q, type: 'side', status: 'active',
@@ -876,14 +937,11 @@ async function doSheet() {
            ${q.rewards.items && q.rewards.items.length ? ' · ' + q.rewards.items.map(esc).join(', ') : ''}
          </div>`
       : '';
-    const chainBadge = q.chain
-      ? `<span style="font-size:10px;color:#8a8a9a;background:var(--bg-deep);padding:1px 6px;border-radius:4px;margin-left:4px">цепочка ${esc(q.chain)} #${q.chain_order || '?'}</span>`
-      : '';
     return `<div class="ability-card" style="border-color:${statusColor};${isCompleted ? 'opacity:0.55;' : ''}">
       <div class="ability-header">
         <span class="ability-name" style="color:${statusColor}">${statusIcon} ${t.icon} ${esc(q.name || '—')}</span>
       </div>
-      <div style="font-size:11px;color:${statusColor};margin-bottom:4px">${t.label}${chainBadge}${q.giver ? ' · от ' + esc(q.giver) : ''}${q.location ? ' · ' + esc(q.location) : ''}</div>
+      <div style="font-size:11px;color:${statusColor};margin-bottom:4px">${t.label}${q.giver ? ' · от ' + esc(q.giver) : ''}${q.location ? ' · ' + esc(q.location) : ''}</div>
       <div>${stages || '<div style="font-size:12px;color:var(--text-secondary);font-style:italic">— нет этапов —</div>'}</div>
       ${rewards}
     </div>`;
@@ -944,6 +1002,9 @@ async function doSheet() {
     ? `<img class="avatar-large" src="${cached.url}" alt="${esc(state.name)}" style="width:140px;height:140px">`
     : '';
 
+  const notesCount = (state.notes || []).length;
+  const notesUnread = (state.notes || []).filter(n => n.unread).length;
+
   modalContent.innerHTML = `
     ${avatar}
     <h3>📜 ${esc(state.name || 'Пустой')}</h3>
@@ -963,16 +1024,130 @@ async function doSheet() {
     <div>${questsBlock}${completedBlock}</div>
     <h3 style="margin-top:12px;font-size:15px">📈 Прокачка</h3>
     <div>${lvlHist}</div>
-    <h3 style="margin-top:12px;font-size:15px">Инвентарь</h3><div class="tags">${inv}</div>
+    <h3 style="margin-top:12px;font-size:15px">🎒 Инвентарь</h3><div class="tags">${inv}</div>
     <h3 style="margin-top:12px;font-size:15px">Состояния</h3><div class="tags">${cd}</div>
-    <button class="btn" style="margin-top:8px" onclick="document.getElementById('modal').classList.remove('open');doSkills();">🎯 Умения и навыки</button>
+    <button class="btn" style="margin-top:8px" onclick="document.getElementById('modal').classList.remove('open');doNotes();">📝 Заметки (${notesCount}${notesUnread > 0 ? ', ' + notesUnread + ' новых' : ''})</button>
+    <button class="btn" style="margin-top:4px" onclick="document.getElementById('modal').classList.remove('open');doSkills();">🎯 Умения и навыки</button>
     <button class="btn primary" style="margin-top:4px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
   modalEl.classList.add('open');
 }
 
-/* =========================================================
-   SKILLS
-   ========================================================= */
+/* NOTES — отдельная вкладка */
+async function doNotes() {
+  if (!state) return;
+  const notes = (state.notes || []).slice();
+
+  const typeOrder = ['notification', 'letter', 'document', 'journal', 'note', 'rumor'];
+  const types = [...new Set(notes.map(n => n.type || 'note'))].sort((a, b) => {
+    const ia = typeOrder.indexOf(a); const ib = typeOrder.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  let activeFilter = 'all';
+
+  function renderList() {
+    const filtered = activeFilter === 'all' ? notes : notes.filter(n => (n.type || 'note') === activeFilter);
+    const sorted = filtered.slice().sort((a, b) => {
+      if (a.unread !== b.unread) return a.unread ? -1 : 1;
+      return 0;
+    });
+
+    const counts = { all: notes.length };
+    types.forEach(t => { counts[t] = notes.filter(n => (n.type || 'note') === t).length; });
+
+    const tabsHtml = `
+      <div class="note-tabs">
+        <div class="note-tab ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">Все (${counts.all})</div>
+        ${types.map(t => {
+          const info = NOTE_TYPES[t] || NOTE_TYPES.note;
+          return `<div class="note-tab ${activeFilter === t ? 'active' : ''}" data-filter="${t}">${info.icon} ${info.label} (${counts[t]})</div>`;
+        }).join('')}
+      </div>`;
+
+    const listHtml = sorted.length ? sorted.map(n => {
+      const info = NOTE_TYPES[n.type] || NOTE_TYPES.note;
+      const unreadClass = n.unread ? 'unread' : '';
+      const contentClass = n._expanded ? 'expanded' : '';
+      const metaParts = [];
+      if (n.source) metaParts.push(`от: ${esc(n.source)}`);
+      if (n.date) metaParts.push(esc(n.date));
+      return `
+        <div class="note-card ${unreadClass}" data-id="${esc(n.id)}">
+          <div class="note-header">
+            <span class="note-title">${info.icon} ${esc(n.title || '(без названия)')}</span>
+            <span class="note-type-badge">${info.label}</span>
+          </div>
+          ${metaParts.length ? `<div class="note-meta">${metaParts.join(' · ')}</div>` : ''}
+          <div class="note-content ${contentClass}" data-content-id="${esc(n.id)}">${esc(n.content || '')}</div>
+          <div class="note-actions">
+            ${n.unread ? `<button class="note-action-btn" data-action="read" data-id="${esc(n.id)}">✓ Прочитано</button>` : ''}
+            <button class="note-action-btn" data-action="delete" data-id="${esc(n.id)}">🗑 Удалить</button>
+          </div>
+        </div>`;
+    }).join('') : '<div class="tag empty">нет заметок</div>';
+
+    modalContent.innerHTML = `
+      <h3>📝 Заметки</h3>
+      ${tabsHtml}
+      <div style="max-height:50vh;overflow-y:auto;margin-top:8px">${listHtml}</div>
+      <button class="btn primary" style="margin-top:6px" onclick="document.getElementById('modal').classList.remove('open')">Закрыть</button>`;
+
+    // Обработчики
+    modalContent.querySelectorAll('.note-tab').forEach(tab => {
+      tab.onclick = () => { activeFilter = tab.dataset.filter; renderList(); };
+    });
+    modalContent.querySelectorAll('.note-card').forEach(card => {
+      card.onclick = (e) => {
+        // Клик по кнопке — обрабатываем отдельно
+        if (e.target.closest('.note-action-btn')) return;
+        const id = card.dataset.id;
+        const note = notes.find(n => n.id === id);
+        if (note) {
+          note._expanded = !note._expanded;
+          // Раскрытие = прочитано
+          if (note.unread) {
+            note.unread = false;
+            saveNotesToState();
+          }
+          renderList();
+        }
+      };
+    });
+    modalContent.querySelectorAll('.note-action-btn').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const action = btn.dataset.action;
+        const idx = notes.findIndex(n => n.id === id);
+        if (idx === -1) return;
+        if (action === 'read') {
+          notes[idx].unread = false;
+        } else if (action === 'delete') {
+          notes.splice(idx, 1);
+        }
+        saveNotesToState();
+        renderList();
+        updateNotesBadge();
+      };
+    });
+  }
+
+  function saveNotesToState() {
+    // Убираем служебное поле _expanded перед сохранением
+    state.notes = notes.map(n => {
+      const copy = { ...n };
+      delete copy._expanded;
+      return copy;
+    });
+    persist();
+    renderStatus();
+  }
+
+  renderList();
+  modalEl.classList.add('open');
+}
+
+/* SKILLS */
 async function doSkills() {
   if (!state) return;
   const prof = (state.proficiencies || []).length
@@ -1023,9 +1198,7 @@ async function doSkills() {
   modalEl.classList.add('open');
 }
 
-/* =========================================================
-   SAVE / LOAD / RESET / HELP
-   ========================================================= */
+/* SAVE / LOAD / RESET / HELP */
 async function doSave(name) {
   if (!name) {
     name = await promptModal('Название сохранения', 'game-' + Date.now());
@@ -1069,10 +1242,11 @@ function doReset() {
 function doHelp() {
   addHtmlMsg('system', 'Команды:<br><code>/roll 1d20+3</code> — бросок<br>' +
     '<code>/sheet</code> — полный лист<br><code>/skills</code> — умения и навыки<br>' +
+    '<code>/notes</code> — заметки, письма, документы<br>' +
     '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
     '<code>/reset</code> — новая игра<br><br>' +
-    'Мастер учитывает положение, укрытие и оружие в руке при назначении DC.<br>' +
-    'Кнопка 🎲 Свой в панели быстрого доступа — пресеты d4–d100 и кастомная формула.');
+    'Заметки, письма, документы, слухи — в отдельной вкладке 📝, не в инвентаре.<br>' +
+    'XP начисляется за убийства, победы без убийства и завершённые квесты.');
 }
 function renderAll() {
   chatEl.innerHTML = '';
@@ -1090,8 +1264,8 @@ function renderAll() {
 function showIntro() {
   addMsg('system', 'Опишите персонажа, мир, тон и стартовую ситуацию.\n' +
     'Например: «Я — эльф-плут Кейр, Преступник. Тёмное фэнтези, город на болоте. Начинаю в камере.»\n\n' +
-    'Мастер сам выставит характеристики, навыки, умения, будет учитывать положение тела.\n' +
-    'Или выберите готовый мир в меню ☰ → «Готовые миры».');
+    'Мастер выставит характеристики, навыки, умения. XP за убийства и квесты начисляется автоматически.\n' +
+    'Письма, документы и слухи — в отдельной вкладке 📝 Заметки.');
 }
 function renderWorlds() {
   const container = document.getElementById('worlds-section');
@@ -1118,9 +1292,7 @@ function renderWorlds() {
   });
 }
 
-/* =========================================================
-   DICE MODAL — пресеты + кастомная формула
-   ========================================================= */
+/* DICE MODAL */
 function rollModal() {
   return new Promise(res => {
     const presets = ['1d4', '1d6', '1d8', '1d10', '1d12', '1d20', '2d6', '1d100'];
@@ -1203,7 +1375,6 @@ inputEl.addEventListener('keydown', e => {
 });
 sendBtn.onclick = () => sendMessage(inputEl.value);
 
-/* Быстрые кнопки над полем ввода */
 document.querySelectorAll('.quick-btn').forEach(btn => {
   btn.onclick = () => {
     if (busy) return;
@@ -1217,7 +1388,6 @@ document.querySelectorAll('.quick-btn').forEach(btn => {
   };
 });
 
-/* Отдельный обработчик для «Свой бросок» — у него нет data-quick */
 const quickCustomRoll = document.getElementById('quick-custom-roll');
 if (quickCustomRoll) {
   quickCustomRoll.onclick = () => {
@@ -1243,6 +1413,7 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
     else if (a === 'dice-custom') rollModal().then(v => { if (v) doRoll(v); });
     else if (a === 'sheet') doSheet();
     else if (a === 'skills') doSkills();
+    else if (a === 'notes') doNotes();
     else if (a === 'save') doSave();
     else if (a === 'load') doLoad();
     else if (a === 'reset') doReset();
@@ -1250,50 +1421,4 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
   };
 });
 
-function init() {
-  const saved = restore();
-  if (saved && saved.messages.length) {
-    messages = saved.messages;
-    state = saved.state || {...EMPTY_STATE};
-    if (!Array.isArray(state.relationships)) state.relationships = [];
-    if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
-    if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
-    if (!Array.isArray(state.proficiencies)) state.proficiencies = [];
-    if (!Array.isArray(state.skills)) state.skills = [];
-    if (!Array.isArray(state.abilities)) state.abilities = [];
-    if (!Array.isArray(state.level_history)) state.level_history = [];
-    if (typeof state.dc_modifier !== 'number') state.dc_modifier = 0;
-    if (typeof state.race !== 'string') state.race = '';
-    if (typeof state.class !== 'string') state.class = '';
-    if (typeof state.background !== 'string') state.background = '';
-    if (typeof state.position !== 'string') state.position = 'стоит';
-    if (typeof state.cover !== 'string') state.cover = 'нет';
-    if (typeof state.weapon_in_hand !== 'string') state.weapon_in_hand = '';
-    if (typeof state.restrained !== 'boolean') state.restrained = false;
-    if (Array.isArray(state.quests)) {
-      state.quests = state.quests.map(q => {
-        if (typeof q === 'string') {
-          return { id: 'legacy-' + Math.random().toString(36).slice(2,8), name: q,
-                   type: 'side', status: 'active', chain: '', chain_order: 0,
-                   stages: [], current_stage: 0, rewards: {}, giver: '', location: '' };
-        }
-        return q;
-      });
-    } else {
-      state.quests = [];
-    }
-    renderAll(); renderStatus();
-    addMsg('system', '↩ История восстановлена. Продолжайте.');
-  } else {
-    state = {...EMPTY_STATE};
-    renderStatus();
-    showIntro();
-  }
-  renderWorlds();
-  ttsLoad();
-  autosize();
-}
-init();
-</script>
-</body>
-</html>
+function
