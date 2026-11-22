@@ -1421,4 +1421,52 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
   };
 });
 
-function
+function init() {
+  const saved = restore();
+  if (saved && saved.messages.length) {
+    messages = saved.messages;
+    state = saved.state || {...EMPTY_STATE};
+    // Совместимость
+    if (!Array.isArray(state.relationships)) state.relationships = [];
+    if (!Array.isArray(state.faction_clocks)) state.faction_clocks = [];
+    if (!Array.isArray(state.dc_modifier_reasons)) state.dc_modifier_reasons = [];
+    if (!Array.isArray(state.proficiencies)) state.proficiencies = [];
+    if (!Array.isArray(state.skills)) state.skills = [];
+    if (!Array.isArray(state.abilities)) state.abilities = [];
+    if (!Array.isArray(state.level_history)) state.level_history = [];
+    if (!Array.isArray(state.notes)) state.notes = [];
+    if (typeof state.dc_modifier !== 'number') state.dc_modifier = 0;
+    if (typeof state.race !== 'string') state.race = '';
+    if (typeof state.class !== 'string') state.class = '';
+    if (typeof state.background !== 'string') state.background = '';
+    if (typeof state.position !== 'string') state.position = 'стоит';
+    if (typeof state.cover !== 'string') state.cover = 'нет';
+    if (typeof state.weapon_in_hand !== 'string') state.weapon_in_hand = '';
+    if (typeof state.restrained !== 'boolean') state.restrained = false;
+    if (Array.isArray(state.quests)) {
+      state.quests = state.quests.map(q => {
+        if (typeof q === 'string') {
+          return { id: 'legacy-' + Math.random().toString(36).slice(2,8), name: q,
+                   type: 'side', status: 'active', chain: '', chain_order: 0,
+                   stages: [], current_stage: 0, rewards: {}, giver: '', location: '' };
+        }
+        return q;
+      });
+    } else {
+      state.quests = [];
+    }
+    renderAll(); renderStatus();
+    addMsg('system', '↩ История восстановлена. Продолжайте.');
+  } else {
+    state = {...EMPTY_STATE};
+    renderStatus();
+    showIntro();
+  }
+  renderWorlds();
+  ttsLoad();
+  autosize();
+}
+init();
+</script>
+</body>
+</html>
