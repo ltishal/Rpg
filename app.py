@@ -2,14 +2,21 @@ import os
 import re
 import json
 import random
+import hashlib
+import tempfile
+import threading
+from contextlib import contextmanager
 from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).with_name(".env"))
 
 from flask import Flask, request, jsonify, Response, render_template
 from openai import OpenAI
 
 app = Flask(__name__)
 
-MODEL = os.getenv("OPENAI_MODEL", "gpt-6-luna")
+MODEL = os.getenv("OPENAI_MODEL", "qwen2.5:7b")
 BASE_URL = os.getenv("OPENAI_BASE_URL") or None
 API_KEY = os.getenv("OPENAI_API_KEY")
 if not API_KEY and BASE_URL:
@@ -22,11 +29,49 @@ if BASE_URL:
 else:
     client = OpenAI(api_key=API_KEY)
 
-SAVES_DIR = Path("saves")
+# Служебные вызовы (извлечение состояния, резюме) можно увести на модель полегче.
+# Пусто → используется MODEL.
+EXTRACT_MODEL = os.getenv("EXTRACT_MODEL") or MODEL
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL") or MODEL
+
+BASE_DIR = Path(__file__).resolve().parent
+SAVES_DIR = BASE_DIR / "saves"
 SAVES_DIR.mkdir(exist_ok=True)
 
 FREQ_PENALTY = float(os.getenv("OPENAI_FREQ_PENALTY", "0.35"))
 PRES_PENALTY = float(os.getenv("OPENAI_PRES_PENALTY", "0.25"))
+
+# ─── Лимит параллельных обращений к модели ─────────────────────────────────
+# Главное узкое место при нескольких игроках. Ставьте ровно столько, сколько
+# выдерживает ваш бэкенд (для Ollama — OLLAMA_NUM_PARALLEL).
+LLM_MAX_CONCURRENT = max(1, int(os.getenv("LLM_MAX_CONCURRENT", "2")))
+LLM_QUEUE_TIMEOUT = float(os.getenv("LLM_QUEUE_TIMEOUT", "120"))
+LLM_SEM = threading.BoundedSemaphore(LLM_MAX_CONCURRENT)
+
+
+@contextmanager
+def llm_slot(timeout=None):
+    """Контекст, дающий слот на обращение к модели.
+
+    yield True  — слот получен;
+    yield False — очередь переполнена, обращаться не надо.
+    """
+    ok = LLM_SEM.acquire(timeout=LLM_QUEUE_TIMEOUT if timeout is None else timeout)
+    try:
+        yield ok
+    finally:
+        if ok:
+            LLM_SEM.release()
+
+
+def _header_token(name, limit):
+    """Безопасное значение заголовка: только буквы, цифры, дефис и подчёркивание."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "", request.headers.get(name, ""))[:limit]
+
+
+def _client_id():
+    """Идентификатор устройства игрока. Разделяет сохранения между людьми."""
+    return _header_token("X-Client-Id", 32) or "shared"
 
 
 SYSTEM_PROMPT = """
@@ -146,18 +191,10 @@ XP ЗА УБИЙСТВО ПРОТИВНИКА (по силе):
 ⚠️ XP ЗА КВЕСТ ВЫДАЁТСЯ ВСЕГДА при завершении. Не «может быть», а «выдаётся».
 
 ════════ ПРОКАЧКА УРОВНЯ ════════
-При xp >= xp_next — повышение. Каждый уровень даёт:
-
-1. HP: +2 + модификатор Телосложения.
-2. +1 к ОДНОЙ характеристике (на выбор игрока, макс 20).
-3. Новое умение ИЛИ улучшение старого (по классу).
-4. На 5/9/13/17 ур. — +1 к бонусу мастерства (пересчёт всех навыков).
-
-XP для следующего уровня:
-1→2: 100; 2→3: 250; 3→4: 500; 4→5: 1000; 5→6: 2000;
-6→7: 3500; 7→8: 5500; 8→9: 8000; 9→10: 12000; 10+: +5000.
-
-Объявляй: «Уровень N! +X HP, +1 к <хар>, новое умение: <название>.»
+Уровень и порог следующего уровня рассчитываются сервером из XP. Не меняй XP, уровень или xp_next.
+Когда персонаж достигает нового уровня, сообщи об этом и предложи игроку выбрать повышение характеристики и новое/улучшенное умение.
+Не применяй бонусы автоматически до выбора игрока. После выбора обнови HP, характеристику и умение в листе персонажа.
+Пороги XP: 100, 250, 500, 1000, 2000, 3500, 5500, 8000, 12000; после 10 уровня +5000 за уровень.
 
 ════════ СОЗДАНИЕ ПЕРСОНАЖА ════════
 При первом описании персонажа определи:
@@ -248,7 +285,7 @@ XP для следующего уровня:
 ПОЛОЖЕНИЕ ТЕЛА: лежит +3 (ближняя), +5 (подъём); плавает/висит +3; схвачен +5; обездвижен — автопровал.
 УКРЫТИЕ (для цели, по которой бьют): половинное +2, 3/4 +5, полное — невозможно.
 РУКИ: обе заняты +2 на действия со свободной рукой.
-СОСТОЯНИЕ: темнота +3, слепота +5, ранение +2, крит. +3, отравлен +2, испуг +2, спешка +2, местность +1..+2.
+СОСТОЯНИЕ: темнота +3, слепота +5, ранение +2, крит. +3, отравлен +2, испуган +2, спешка +2, местность +1..+2.
 ПОМОЩЬ: союзник −2, подготовка −2..−3, знакомое −1..−2.
 
 СВЯЗАННЫЕ ДЕЙСТВИЯ:
@@ -301,26 +338,12 @@ STATE_EXTRACT_PROMPT = """
   "dc_modifier": 0, "dc_modifier_reasons": [],
   "position": "стоит", "cover": "нет",
   "weapon_in_hand": "", "restrained": false,
-  "level_history": []
+  "level_history": [], "xp_event_ids": []
 }
 
-⚠️ XP — ВАЖНО:
-- Если в диалоге есть убийство, победа, решение проблемы или завершение квеста — ОБЯЗАТЕЛЬНО прибавь XP.
-- Если мастер написал «+N XP» — прибавь N к xp.
-- Если мастер написал «гоблин падает», «враг побеждён», «ты обходишь патруль», но не написал XP — прибавь по таблице сам.
-- XP НЕ УБЫВАЕТ и не сбрасывается.
-- Не прибавляй дважды за одно событие.
-
-Таблица XP (если мастер забыл):
-- Слабый враг (CR 1/8–1/4): 10–25
-- Обычный (CR 1/2–1): 50–100
-- Опасный (CR 2–4): 150–250
-- Сильный (CR 5–8): 500–1000
-- Очень сильный (CR 9–12): 1500–2500
-- Легендарный (CR 13+): 3000–5000
-- Победа без убийства: 50% от базы
-- Решение проблемы: 10–250 по сложности
-- Квест завершён: по rewards.xp
+XP, LEVEL, XP_NEXT, LEVEL_PENDING — НЕ ИЗМЕНЯЙ самостоятельно. Сохрани значения из текущего состояния.
+XP начисляется сервером только из новых реплик мастера с явным форматом «+N XP».
+Не рассчитывай награды и не повышай уровень; сервер обработает это отдельно.
 
 ⚠️ INVENTORY vs NOTES:
 - inventory — ТОЛЬКО физические предметы: оружие, броня, зелья, еда, инструменты, монеты, украшения, ключи.
@@ -419,46 +442,108 @@ DEFAULT_STATE = {
     "dc_modifier": 0, "dc_modifier_reasons": [],
     "position": "стоит", "cover": "нет",
     "weapon_in_hand": "", "restrained": False,
-    "level_history": []
+    "level_history": [], "xp_event_ids": [], "level_pending": 0
 }
 
+# Что уходит модели в промпте чата. Заметки, квесты и история уровней
+# остаются в диалоге и в отдельном листе — в каждый запрос их не шлём.
+STATE_FIELDS = ("name", "race", "class", "background", "level", "xp", "xp_next",
+                "hp", "max_hp", "gold", "stats", "conditions", "position",
+                "cover", "weapon_in_hand", "restrained")
+STATE_NOTE = ("[АКТУАЛЬНОЕ СОСТОЯНИЕ ПЕРСОНАЖА — справочная информация, "
+              "не меняй числа без игрового события]\n")
 
-MAX_MESSAGES_BEFORE_SUMMARY = 25
-KEEP_RECENT = 8
+
+MAX_MESSAGES_BEFORE_SUMMARY = 24
+KEEP_RECENT = 10
+SUMMARY_MAX_SESSIONS = int(os.getenv("SUMMARY_MAX_SESSIONS", "128"))
+
+# Резюме прошлого живёт на сервере, по session_id. Клиент его не хранит
+# и не присылает — иначе оно пересчитывалось бы каждый ход.
+_SUMMARY_STATE = {}
+_SUMMARY_LOCK = threading.Lock()
 
 
-def summarize_old_messages(messages):
-    if len(messages) <= MAX_MESSAGES_BEFORE_SUMMARY:
+def _summary_get(sid):
+    with _SUMMARY_LOCK:
+        st = _SUMMARY_STATE.get(sid)
+        return dict(st) if st else {"text": "", "folded": 0}
+
+
+def _summary_put(sid, text, folded):
+    with _SUMMARY_LOCK:
+        if sid not in _SUMMARY_STATE and len(_SUMMARY_STATE) >= SUMMARY_MAX_SESSIONS:
+            _SUMMARY_STATE.pop(next(iter(_SUMMARY_STATE)))
+        _SUMMARY_STATE[sid] = {"text": text, "folded": folded}
+
+
+def summarize_old_messages(messages, session_id=""):
+    """Сворачивает старую часть диалога в одно резюме.
+
+    Резюме хранится по session_id и обновляется инкрементально: за ход
+    досжимается только прирост, вышедший за окно KEEP_RECENT. Без session_id
+    резюме не запоминается между запросами.
+    """
+    if not isinstance(messages, list):
         return messages
-    system = messages[0]
-    body = messages[1:]
-    if len(body) <= KEEP_RECENT * 2:
-        return messages
-    for m in messages:
-        if m.get("role") == "system" and m.get("content", "").startswith("[РЕЗЮМЕ"):
-            return messages
-    to_summarize = body[:-KEEP_RECENT]
-    recent = body[-KEEP_RECENT:]
-    dialogue = "\n".join(
-        f"{m['role']}: {m['content']}" for m in to_summarize if m.get("content")
-    )
-    if not dialogue.strip():
-        return messages
+
+    system_messages = [m for m in messages if m.get("role") == "system"]
+    dialogue = [m for m in messages if m.get("role") in ("user", "assistant")]
+    other_system = [m for m in system_messages
+                    if not m.get("content", "").startswith("[РЕЗЮМЕ ПРОШЛОГО]")]
+
+    def pack(text, tail):
+        head = ([{"role": "system", "content": f"[РЕЗЮМЕ ПРОШЛОГО]\n{text}"}]
+                if text else [])
+        return other_system + head + tail
+
+    persist = bool(session_id)
+    st = _summary_get(session_id) if persist else {"text": "", "folded": 0}
+    summary_text = st["text"]
+    folded = min(max(0, int(st["folded"])), len(dialogue))
+
+    # Пока история короткая — ничего не сжимаем.
+    if len(dialogue) <= MAX_MESSAGES_BEFORE_SUMMARY:
+        return pack(summary_text, dialogue[folded:])
+
+    target = len(dialogue) - KEEP_RECENT
+    tail = dialogue[folded:]
+    if target <= folded:
+        return pack(summary_text, tail)
+
+    new_part = dialogue[folded:target]
+    text_to_summarize = "\n".join(f"{m['role']}: {m.get('content', '')}"
+                                  for m in new_part if m.get("content"))
+    if not text_to_summarize.strip():
+        return pack(summary_text, tail)
+
+    archive_input = ((summary_text + "\n\nНОВЫЕ СОБЫТИЯ:\n") if summary_text
+                     else "") + text_to_summarize
     try:
-        resp = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": SUMMARY_PROMPT},
-                {"role": "user", "content": f"ДИАЛОГ:\n{dialogue}\n\nСожми в резюме."},
-            ],
-            temperature=0.3,
-        )
-        summary = (resp.choices[0].message.content or "").strip()
-        if not summary:
-            return messages
-        return [system, {"role": "system", "content": f"[РЕЗЮМЕ ПРОШЛОГО]\n{summary}"}] + recent
+        with llm_slot() as ok:
+            if not ok:
+                raise RuntimeError("нет свободного слота модели")
+            resp = client.chat.completions.create(
+                model=SUMMARY_MODEL,
+                messages=[{"role": "system", "content": SUMMARY_PROMPT},
+                          {"role": "user", "content":
+                           f"Материал для обновления памяти:\n{archive_input}\n\n"
+                           "Обнови резюме, сохранив старые важные факты и добавив новые."}],
+                temperature=0.2,
+            )
+        new_summary = (resp.choices[0].message.content or "").strip()
+        if not new_summary:
+            raise RuntimeError("пустое резюме")
     except Exception:
-        return messages
+        # Сжать не вышло. Отдаём что есть: прежнее резюме плюс несвёрнутый хвост.
+        # Если резюме ещё нет — режем историю по окну, чтобы не переполнить контекст.
+        if summary_text:
+            return pack(summary_text, tail)
+        return other_system + dialogue[-KEEP_RECENT:]
+
+    if persist:
+        _summary_put(session_id, new_summary, target)
+    return pack(new_summary, dialogue[target:])
 
 
 def roll_dice(expr):
@@ -524,49 +609,194 @@ def normalize_note(n):
     return None
 
 
+LEVEL_THRESHOLDS = {2: 100, 3: 250, 4: 500, 5: 1000, 6: 2000,
+                   7: 3500, 8: 5500, 9: 8000, 10: 12000}
+
+
+def level_for_xp(xp):
+    level = 1
+    for target, threshold in LEVEL_THRESHOLDS.items():
+        if xp >= threshold:
+            level = target
+    if xp >= LEVEL_THRESHOLDS[10]:
+        level = 10 + (xp - LEVEL_THRESHOLDS[10]) // 5000
+    return min(20, level)
+
+
+def xp_threshold_for_level(level):
+    if level <= 1:
+        return LEVEL_THRESHOLDS[2]
+    if level <= 9:
+        return LEVEL_THRESHOLDS[level + 1]
+    return 12000 + (level - 9) * 5000
+
+
+XP_EVENT_RE = re.compile(r"\+\s*(\d+)\s*XP\b", re.IGNORECASE)
+
+
+def message_event_id(message, index):
+    raw = f"{index}\0{message.get('role','')}\0{message.get('content','')}"
+    return hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()
+
+
 def extract_state(messages, current_state):
-    recent = messages[-14:]
-    dialogue = "\n".join(
-        f"{m['role']}: {m['content']}" for m in recent if m.get("content")
-    )
-    prompt = (
-        f"ТЕКУЩЕЕ СОСТОЯНИЕ:\n{json.dumps(current_state, ensure_ascii=False)}\n\n"
-        f"ДИАЛОГ:\n{dialogue}\n\n"
-        "Верни обновлённое состояние в формате JSON."
-    )
+    current = dict(DEFAULT_STATE)
+    if isinstance(current_state, dict):
+        current.update(current_state)
+    current.setdefault("xp_event_ids", [])
+    if not isinstance(current.get("xp_event_ids"), list):
+        current["xp_event_ids"] = []
+
+    # On legacy saves, mark historical XP-bearing lines as already seen, except
+    # the latest assistant message (which may be the just-finished turn).
+    if "xp_event_ids" not in (current_state or {}):
+        for index, m in enumerate(messages):
+            if m.get("role") == "assistant" and XP_EVENT_RE.search(m.get("content", "")) and index != (len(messages) - 1):
+                current["xp_event_ids"].append(message_event_id(m, index))
+
+    fresh_events = []
+    for index, m in enumerate(messages):
+        if m.get("role") != "assistant":
+            continue
+        content = m.get("content", "")
+        event_id = message_event_id(m, index)
+        if event_id in current["xp_event_ids"]:
+            continue
+        matches = [int(x) for x in XP_EVENT_RE.findall(content)]
+        if matches:
+            fresh_events.append((event_id, sum(matches)))
+
+    recent = messages[-8:]
+    dialogue = "\n".join(f"{m['role']}: {m['content']}" for m in recent if m.get("content"))
+    prompt = (f"ТЕКУЩЕЕ СОСТОЯНИЕ:\n{json.dumps(current, ensure_ascii=False)}\n\n"
+              f"ДИАЛОГ:\n{dialogue}\n\nВерни обновлённое состояние JSON."
+              " Не меняй XP, уровень и xp_next; XP рассчитывается отдельно сервером.")
     try:
-        resp = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": STATE_EXTRACT_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-        )
-        raw = resp.choices[0].message.content or ""
-        new_state = clean_json(raw)
-        merged = dict(DEFAULT_STATE)
-        merged.update({k: v for k, v in new_state.items() if v is not None})
-        merged["hp"] = max(0, min(int(merged.get("hp", 0)), int(merged.get("max_hp", 1))))
-        merged["level"] = max(1, int(merged.get("level", 1)))
-        merged["xp"] = max(0, int(merged.get("xp", 0)))
-        merged["gold"] = max(0, int(merged.get("gold", 0)))
-        merged["dc_modifier"] = int(merged.get("dc_modifier", 0) or 0)
-        for f in ("race", "class", "background", "position", "cover", "weapon_in_hand"):
-            if not isinstance(merged.get(f), str):
-                merged[f] = DEFAULT_STATE.get(f, "")
-        if not isinstance(merged.get("restrained"), bool):
-            merged["restrained"] = False
-        for f in ("inventory", "notes", "quests", "conditions", "relationships",
-                  "faction_clocks", "dc_modifier_reasons",
-                  "proficiencies", "skills", "abilities", "level_history"):
-            if not isinstance(merged.get(f), list):
-                merged[f] = []
-        merged["quests"] = [q for q in (normalize_quest(x) for x in merged["quests"]) if q]
-        merged["notes"] = [n for n in (normalize_note(x) for x in merged["notes"]) if n]
-        return merged
+        with llm_slot() as ok:
+            if not ok:
+                raise RuntimeError("нет свободного слота модели")
+            resp = client.chat.completions.create(
+                model=EXTRACT_MODEL,
+                messages=[{"role": "system", "content": STATE_EXTRACT_PROMPT},
+                         {"role": "user", "content": prompt}],
+                temperature=0.1,
+            )
+        new_state = clean_json(resp.choices[0].message.content or "")
     except Exception:
-        return current_state
+        new_state = {}
+
+    merged = dict(current)
+    for k, v in new_state.items():
+        if v is not None:
+            merged[k] = v
+    # Preserve arrays when the model accidentally returns empty/missing arrays.
+    for f in ("inventory", "notes", "quests", "conditions", "relationships", "faction_clocks",
+              "dc_modifier_reasons", "proficiencies", "skills", "abilities", "level_history"):
+        old = current.get(f, [])
+        new_items = merged.get(f, [])
+        if not isinstance(old, list): old = []
+        if not isinstance(new_items, list): new_items = old
+        if not new_items and old:
+            merged[f] = old
+        elif old and new_items:
+            # Keep existing entries omitted by a model response. Identity by id/name/title,
+            # otherwise stable JSON; this conservative merge avoids accidental data loss.
+            def ident(item):
+                if isinstance(item, dict):
+                    return item.get("id") or item.get("name") or item.get("title") or json.dumps(item, sort_keys=True, ensure_ascii=False)
+                return str(item)
+            seen = {ident(x) for x in new_items}
+            merged[f] = list(new_items) + [x for x in old if ident(x) not in seen]
+    # Server-authoritative XP: only explicit new rewards, never double-counted.
+    xp = max(0, int(current.get("xp", 0) or 0))
+    processed = list(current.get("xp_event_ids", []))
+    for event_id, amount in fresh_events:
+        if event_id not in processed:
+            xp += amount
+            processed.append(event_id)
+    merged["xp"] = xp
+    merged["xp_event_ids"] = processed[-500:]
+    # Protect core scalar values from blank/null model output.
+    for f in ("name", "race", "class", "background", "position", "cover", "weapon_in_hand"):
+        if not merged.get(f) and current.get(f):
+            merged[f] = current[f]
+    merged["hp"] = max(0, min(int(merged.get("hp", 0) or 0), int(merged.get("max_hp", 1) or 1)))
+    previous_level = max(1, int(current.get("level", 1) or 1))
+    derived_level = level_for_xp(merged["xp"])
+    merged["level"] = derived_level
+    merged["xp_next"] = xp_threshold_for_level(derived_level)
+    merged["level_pending"] = max(0, derived_level - previous_level)
+    merged["gold"] = max(0, int(merged.get("gold", 0) or 0))
+    merged["dc_modifier"] = int(merged.get("dc_modifier", 0) or 0)
+    for f in ("race", "class", "background", "position", "cover", "weapon_in_hand"):
+        if not isinstance(merged.get(f), str): merged[f] = current.get(f, DEFAULT_STATE[f])
+    if not isinstance(merged.get("restrained"), bool): merged["restrained"] = bool(current.get("restrained", False))
+    for f in ("inventory", "notes", "quests", "conditions", "relationships", "faction_clocks",
+              "dc_modifier_reasons", "proficiencies", "skills", "abilities", "level_history", "xp_event_ids"):
+        if not isinstance(merged.get(f), list): merged[f] = current.get(f, [])
+    merged["quests"] = [q for q in (normalize_quest(x) for x in merged["quests"]) if q]
+    merged["notes"] = [n for n in (normalize_note(x) for x in merged["notes"]) if n]
+    return merged
+
+
+# ─── Сохранения ────────────────────────────────────────────────────────────
+def _safe_name(raw):
+    return re.sub(r"[^a-zA-Z0-9_\-]", "", raw or "")
+
+
+def _save_path(cid, name):
+    """Файл сохранения конкретного игрока: <clientId>~<имя>.json"""
+    return SAVES_DIR / f"{cid}~{name}.json"
+
+
+def _save_backup(path):
+    return path.with_name(path.stem + ".bak.json")
+
+
+def _save_candidates(cid, name):
+    """Сначала своё сохранение, потом общее (старые файлы без префикса)."""
+    return [_save_path(cid, name), SAVES_DIR / f"{name}.json"]
+
+
+def _collect_saves(cid):
+    """Имя → путь. Свои сохранения перекрывают одноимённые общие."""
+    prefix = f"{cid}~"
+    own, shared = {}, {}
+    for p in SAVES_DIR.glob("*.json"):
+        if p.name.endswith(".bak.json"):
+            continue
+        stem = p.stem
+        if stem.startswith(prefix):
+            own[stem[len(prefix):]] = p
+        elif "~" not in stem:
+            shared[stem] = p
+    merged = dict(shared)
+    merged.update(own)
+    return merged
+
+
+def _save_info(name, path):
+    """Имя, время последней записи (когда сохранили) и размер файла."""
+    try:
+        st = path.stat()
+        return {"name": name, "saved_at": st.st_mtime, "size": st.st_size}
+    except OSError:
+        return {"name": name, "saved_at": 0, "size": 0}
+
+
+@app.route("/api/health")
+def api_health():
+    return jsonify({
+        "ok": True,
+        "model": MODEL,
+        "extract_model": EXTRACT_MODEL,
+        "summary_model": SUMMARY_MODEL,
+        "base_url_configured": bool(BASE_URL),
+        "llm_max_concurrent": LLM_MAX_CONCURRENT,
+        "llm_queue_timeout": LLM_QUEUE_TIMEOUT,
+        "saves_dir": str(SAVES_DIR),
+        "sessions_cached": len(_SUMMARY_STATE),
+    })
 
 
 @app.route("/")
@@ -587,13 +817,21 @@ def api_roll():
 def api_chat():
     data = request.get_json(silent=True) or {}
     messages = data.get("messages") or []
+    game_state = data.get("state") or DEFAULT_STATE
     if not isinstance(messages, list) or not messages:
         return jsonify({"error": "empty messages"}), 400
     if messages[0].get("role") != "system":
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
-    messages = summarize_old_messages(messages)
+    state_context = {k: v for k, v in (game_state.items() if isinstance(game_state, dict) else [])
+                    if k in STATE_FIELDS}
+    messages = messages[:1] + [{"role": "system", "content": STATE_NOTE + json.dumps(state_context, ensure_ascii=False)}] + messages[1:]
+    messages = summarize_old_messages(messages, _header_token("X-Session-Id", 64))
 
     def generate():
+        if not LLM_SEM.acquire(timeout=LLM_QUEUE_TIMEOUT):
+            # Префикс «[Ошибка API:» клиент распознаёт и не пишет это в историю игры.
+            yield "\n[Ошибка API: сервер занят — все слоты модели заняты. Подождите минуту и повторите.]"
+            return
         try:
             try:
                 stream = client.chat.completions.create(
@@ -620,7 +858,9 @@ def api_chat():
                 if text:
                     yield text
         except Exception as e:
-            yield f"\n[Ошибка API: {e}]"
+            yield "\n[Ошибка API: запрос к модели не выполнен. Проверь настройки модели/API и попробуй снова.]"
+        finally:
+            LLM_SEM.release()
 
     return Response(generate(), mimetype="text/plain; charset=utf-8")
 
@@ -637,30 +877,101 @@ def api_state():
 
 @app.route("/api/saves")
 def api_saves_list():
-    return jsonify(sorted(p.stem for p in SAVES_DIR.glob("*.json")))
+    """Список сохранений игрока: имя, время записи, размер. Новые сверху."""
+    saves = _collect_saves(_client_id())
+    items = [_save_info(name, path) for name, path in saves.items()]
+    items.sort(key=lambda x: x["saved_at"], reverse=True)
+    return jsonify(items)
 
 
 @app.route("/api/save", methods=["POST"])
 def api_save():
     data = request.get_json(silent=True) or {}
-    name = re.sub(r"[^a-zA-Z0-9_\-]", "", data.get("name") or "") or "default"
-    payload = {
-        "messages": data.get("messages") or [],
-        "state": data.get("state") or DEFAULT_STATE,
-    }
-    (SAVES_DIR / f"{name}.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    return jsonify({"ok": True, "name": name})
+    name = _safe_name(data.get("name")) or "default"
+    path = _save_path(_client_id(), name)
+    payload = {"schema_version": 2, "messages": data.get("messages") or [],
+               "state": data.get("state") or DEFAULT_STATE}
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2)
+    # Backup previous file before replacing; atomic replace avoids partial JSON on crash.
+    if path.exists():
+        backup = _save_backup(path)
+        try:
+            backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            pass
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.stem}-", suffix=".tmp", dir=SAVES_DIR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(serialized)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_name, path)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+    return jsonify({"ok": True, "name": name, "saved_at": path.stat().st_mtime})
+
+
+@app.route("/api/save/rename", methods=["POST"])
+def api_save_rename():
+    data = request.get_json(silent=True) or {}
+    old = _safe_name(data.get("name"))
+    new = _safe_name(data.get("new_name"))
+    if not old or not new:
+        return jsonify({"ok": False, "error": "нужны name и new_name"}), 400
+    if old == new:
+        return jsonify({"ok": True, "name": new})
+
+    cid = _client_id()
+    src = next((p for p in _save_candidates(cid, old) if p.exists()), None)
+    if src is None:
+        return jsonify({"ok": False, "error": "сохранение не найдено"}), 404
+
+    dst = _save_path(cid, new)
+    if dst.exists():
+        return jsonify({"ok": False, "error": "сохранение с таким именем уже есть"}), 409
+    try:
+        os.replace(src, dst)          # время записи при переименовании сохраняется
+        src_bak = _save_backup(src)
+        if src_bak.exists():
+            os.replace(src_bak, _save_backup(dst))
+    except OSError as exc:
+        return jsonify({"ok": False, "error": str(exc)[:200]}), 500
+    return jsonify({"ok": True, "name": new})
+
+
+@app.route("/api/save/delete", methods=["POST"])
+def api_save_delete():
+    data = request.get_json(silent=True) or {}
+    name = _safe_name(data.get("name"))
+    if not name:
+        return jsonify({"ok": False, "error": "нужно name"}), 400
+
+    cid = _client_id()
+    removed = []
+    for path in _save_candidates(cid, name):
+        for f in (path, _save_backup(path)):
+            if f.exists():
+                try:
+                    f.unlink()
+                except OSError as exc:
+                    return jsonify({"ok": False, "error": str(exc)[:200]}), 500
+                removed.append(f.name)
+    if not removed:
+        return jsonify({"ok": False, "error": "сохранение не найдено"}), 404
+    return jsonify({"ok": True, "name": name, "removed": removed})
 
 
 @app.route("/api/load/<name>")
 def api_load(name):
-    name = re.sub(r"[^a-zA-Z0-9_\-]", "", name)
-    path = SAVES_DIR / f"{name}.json"
-    if not path.exists():
+    name = _safe_name(name)
+    path = next((p for p in _save_candidates(_client_id(), name) if p.exists()), None)
+    if path is None:
         return jsonify({"error": "not found"}), 404
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return jsonify({"error": "save file is corrupted"}), 500
     if isinstance(data, list):
         data = {"messages": data, "state": DEFAULT_STATE}
     return jsonify(data)
