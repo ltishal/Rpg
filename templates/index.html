@@ -293,6 +293,19 @@
     background: var(--bg-deep); border: 1px solid var(--border-subtle);
     border-radius: 6px; padding: 6px 10px;
   }
+  /* Перенос партии */
+  .transfer-area {
+    width: 100%; height: 150px; background: var(--bg-deep);
+    color: var(--text-primary); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px; font: 12px monospace;
+    resize: vertical; outline: none;
+  }
+  .transfer-area:focus { border-color: var(--accent-gold); }
+  .transfer-hint { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+  .transfer-info { font-size: 11px; color: var(--text-secondary); }
+  .transfer-info.warn { color: #d45a5a; }
+  .transfer-row { display: flex; gap: 6px; }
+  .transfer-row .btn { flex: 1; }
 </style>
 </head>
 <body>
@@ -349,6 +362,7 @@
   <div class="drawer-section">
     <button class="btn" data-action="save">💾 Сохранить</button>
     <button class="btn" data-action="load">📂 Загрузить</button>
+    <button class="btn" data-action="transfer">🔄 Перенос партии</button>
     <button class="btn" data-action="reset">✨ Новая игра</button>
     <button class="btn" data-action="help">❓ Справка</button>
   </div>
@@ -514,7 +528,7 @@ function ttsClean(text) {
   return text
     .replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '')
     .replace(/\*+.*?\*+/g, '')
-    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡⭐📈✓✗●▶○🎁🏛👤📝✉🔔💬📔]/g, '')
+    .replace(/[🎲🔊🔈⏩⏹🎙🖼📜💾📂✨❓🌍🔍🚶🗣⚔🛌🎒🎯🧍🪑🧎🐎🏊🪜🤝⛓🛡⭐📈✓✗●▶○🎁🏛👤📝✉🔔💬📔🔄📤📥📋✅📁]/g, '')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
     .replace(/\s+/g, ' ').trim();
@@ -822,6 +836,7 @@ function handleCommand(cmd, arg) {
     case '/notes': return doNotes();
     case '/save': return doSave(arg);
     case '/load': return doLoad(arg);
+    case '/transfer': return doTransfer();
     case '/reset': return doReset();
     case '/help': return doHelp();
     default: addMsg('system', `Неизвестная команда: ${cmd}. Введите /help.`);
@@ -1296,8 +1311,142 @@ async function doLoad(name) {
   } catch(e) { addMsg('system', 'Ошибка: ' + e.message); }
 }
 
+/* ═══════════ ПЕРЕНОС ПАРТИИ ═══════════
+   Переносит партию между браузерами и устройствами обычным текстом.
+   Во встроенных браузерах (Telegram, Instagram) нет ни консоли,
+   ни закладок, ни букмарклетов — а копирование текста работает везде.
+
+   Переносятся обе части партии:
+     messages — вся история ходов и ответов мастера
+     state    — персонаж: имя, раса, класс, уровень, XP, HP,
+                инвентарь, заметки, квесты, отношения. */
+
+function doTransfer() {
+  const current = JSON.stringify({messages, state});
+  const charName = (state && state.name) || 'Пустой';
+
+  modalContent.innerHTML = `
+    <h3>🔄 Перенос партии</h3>
+    <div class="transfer-hint">
+      <b>Сохранить копию:</b> нажмите «Скопировать» и вставьте текст в Заметки
+      или отправьте себе в «Избранное».<br>
+      <b>Загрузить:</b> вставьте текст в поле (или возьмите файл) и нажмите «Применить».
+    </div>
+    <textarea id="transfer-area" class="transfer-area" spellcheck="false"></textarea>
+    <div id="transfer-info" class="transfer-info"></div>
+    <div class="transfer-row">
+      <button class="btn" id="transfer-copy">📋 Скопировать</button>
+      <button class="btn" id="transfer-download">💾 Скачать файл</button>
+    </div>
+    <div class="transfer-row">
+      <button class="btn" id="transfer-file-btn">📁 Из файла</button>
+      <button class="btn primary" id="transfer-apply">✅ Применить</button>
+    </div>
+    <input type="file" id="transfer-file" accept=".json,application/json" style="display:none">
+    <button class="btn" id="transfer-close">Закрыть</button>`;
+
+  const area = document.getElementById('transfer-area');
+  const info = document.getElementById('transfer-info');
+  const fileInput = document.getElementById('transfer-file');
+  area.value = current;
+
+  const showInfo = (msg, warn) => {
+    if (msg) {
+      info.textContent = msg;
+      info.className = 'transfer-info' + (warn ? ' warn' : '');
+      return;
+    }
+    const kb = Math.max(1, Math.round(area.value.length / 1024));
+    info.textContent =
+      `В поле: ${kb} КБ. Текущая партия: сообщений ${messages.length}, ` +
+      `персонаж «${charName}».`;
+    info.className = 'transfer-info';
+  };
+  showInfo();
+  area.addEventListener('input', () => showInfo());
+
+  document.getElementById('transfer-close').onclick = () =>
+    modalEl.classList.remove('open');
+
+  document.getElementById('transfer-copy').onclick = async () => {
+    const btn = document.getElementById('transfer-copy');
+    area.focus();
+    area.select();
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(area.value);
+        ok = true;
+      }
+    } catch (e) {}
+    if (!ok) { try { ok = document.execCommand('copy'); } catch (e) {} }
+    btn.textContent = ok ? '✓ Скопировано' : 'Скопируйте вручную';
+    setTimeout(() => { btn.textContent = '📋 Скопировать'; }, 2000);
+  };
+
+  document.getElementById('transfer-download').onclick = () => {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const blob = new Blob([area.value], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rpg-${charName}-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+
+  document.getElementById('transfer-file-btn').onclick = () => fileInput.click();
+
+  fileInput.onchange = () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { area.value = String(reader.result || ''); showInfo(); };
+    reader.readAsText(f);
+  };
+
+  document.getElementById('transfer-apply').onclick = () => {
+    const raw = area.value.trim();
+    if (!raw) { showInfo('Поле пустое.', true); return; }
+    if (raw === current) { showInfo('Это ваша текущая партия — менять нечего.'); return; }
+
+    let d;
+    try {
+      d = JSON.parse(raw);
+    } catch (e) {
+      showInfo('Текст повреждён или скопирован не полностью.', true);
+      return;
+    }
+    if (!d || !Array.isArray(d.messages)) {
+      showInfo('Это не похоже на партию: нет списка сообщений.', true);
+      return;
+    }
+    const nm = (d.state && d.state.name) || 'Пустой';
+    const lvl = (d.state && d.state.level) || 1;
+    if (!confirm(`Заменить текущую партию?\n\n` +
+                 `Загружаемая: «${nm}», уровень ${lvl}, сообщений ${d.messages.length}.\n` +
+                 `Текущая партия будет потеряна.`)) return;
+
+    messages = d.messages;
+    state = d.state || {...EMPTY_STATE};
+    resetSession();
+    persist();
+    chatEl.innerHTML = '';
+    renderAll();
+    renderStatus();
+    modalEl.classList.remove('open');
+    addMsg('system',
+      `🔄 Партия загружена: «${state.name || 'Пустой'}», уровень ${state.level || 1}, ` +
+      `сообщений ${messages.length}. Нажмите «💾 Сохранить», чтобы она попала на сервер.`);
+  };
+
+  modalEl.classList.add('open');
+}
+
 function doReset() {
-  if (!confirm('Начать новую игру? Текущая история будет потеряна.')) return;
+  if (!confirm('Начать новую игру? Текущая история будет потеряна.\n\n' +
+               'Совет: сначала сделайте «🔄 Перенос партии» → «Скопировать».')) return;
   messages = []; state = {...EMPTY_STATE};
   resetSession();
   ttsStop();
@@ -1309,10 +1458,11 @@ function doHelp() {
     '<code>/sheet</code> — полный лист<br><code>/skills</code> — умения и навыки<br>' +
     '<code>/notes</code> — заметки, письма, документы<br>' +
     '<code>/save имя</code> — сохранить<br><code>/load имя</code> — загрузить<br>' +
-    '<code>/reset</code> — новая игра<br><br>' +
+    '<code>/transfer</code> — перенос партии<br><code>/reset</code> — новая игра<br><br>' +
     'Заметки, письма, документы, слухи — в отдельной вкладке 📝, не в инвентаре.<br>' +
     'XP начисляется за убийства, победы без убийства и завершённые квесты.<br>' +
-    'В окне загрузки можно переименовать (✎) и удалить (🗑) сохранение; рядом видно время записи.');
+    'В окне загрузки можно переименовать (✎) и удалить (🗑) сохранение.<br>' +
+    '🔄 Перенос партии — чтобы продолжить игру в другом браузере или на другом устройстве.');
 }
 
 function renderAll() {
@@ -1470,15 +1620,13 @@ document.querySelectorAll('#drawer .btn[data-action]').forEach(btn => {
     else if (a === 'notes') doNotes();
     else if (a === 'save') doSave();
     else if (a === 'load') doLoad();
+    else if (a === 'transfer') doTransfer();
     else if (a === 'reset') doReset();
     else if (a === 'help') doHelp();
   };
 });
 
 function init() {
-  // Чистим следы прежней версии с аватарами.
-  try { localStorage.removeItem('rpg_avatar_v1'); } catch(e){}
-
   const saved = restore();
   if (saved && saved.messages.length) {
     messages = saved.messages;
